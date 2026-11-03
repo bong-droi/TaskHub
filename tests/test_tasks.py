@@ -1,44 +1,51 @@
 from datetime import date, timedelta
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.api.deps import get_task_repo
-from app.main import app
-from app.repositories.task_repository import TaskRepository
+API = "/api/v1/tasks"
 
 
-@pytest.fixture
-def client():
-    repo = TaskRepository()
-    app.dependency_overrides[get_task_repo] = lambda: repo  # repo sạch cho mỗi test
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+async def test_health(client):
+    assert (await client.get("/api/v1/health")).json() == {"status": "ok"}
 
 
-def test_health(client):
-    assert client.get("/api/v1/health").json() == {"status": "ok"}
-
-
-def test_crud_flow(client):
-    r = client.post("/api/v1/tasks", json={"title": "Học FastAPI"})
+async def test_crud_flow(client, seeded):
+    r = await client.post(API, json={"title": "Học SQLAlchemy", "project_id": seeded["project_id"]})
     assert r.status_code == 201
     task = r.json()
     assert task["status"] == "TODO" and task["priority"] == "MEDIUM"
+    assert task["created_at"]  # server_default đã được nạp lại
 
-    r = client.patch(f"/api/v1/tasks/{task['id']}", json={"status": "DONE"})
+    r = await client.patch(f"{API}/{task['id']}", json={"status": "DONE"})
     assert r.json()["status"] == "DONE"
-    assert r.json()["title"] == "Học FastAPI"  # exclude_unset: field khác giữ nguyên
+    assert r.json()["title"] == "Học SQLAlchemy"  # exclude_unset: field khác giữ nguyên
 
-    assert len(client.get("/api/v1/tasks").json()) == 1
-    assert client.delete(f"/api/v1/tasks/{task['id']}").status_code == 204
-    assert client.get(f"/api/v1/tasks/{task['id']}").status_code == 404
+    assert (await client.get(f"{API}/{task['id']}")).status_code == 200
+    assert (await client.delete(f"{API}/{task['id']}")).status_code == 204
+    assert (await client.get(f"{API}/{task['id']}")).status_code == 404
 
 
-def test_validation_errors(client):
-    assert client.post("/api/v1/tasks", json={"title": ""}).status_code == 422
+async def test_pagination(client, seeded):
+    for i in range(5):
+        await client.post(API, json={"title": f"T{i}", "project_id": seeded["project_id"]})
+    page = (await client.get(f"{API}?skip=1&limit=2")).json()
+    assert page["total"] == 5 and len(page["items"]) == 2
+    assert [t["title"] for t in page["items"]] == ["T1", "T2"]
+
+
+async def test_assign_user(client, seeded):
+    body = {"title": "A", "project_id": seeded["project_id"], "assignee_id": seeded["user_id"]}
+    assert (await client.post(API, json=body)).json()["assignee_id"] == seeded["user_id"]
+    body["assignee_id"] = 9999
+    assert (await client.post(API, json=body)).status_code == 404
+
+
+async def test_foreign_key_checks(client):
+    assert (await client.post(API, json={"title": "x", "project_id": 9999})).status_code == 404
+
+
+async def test_validation_errors(client, seeded):
+    pid = seeded["project_id"]
+    assert (await client.post(API, json={"title": "", "project_id": pid})).status_code == 422
     past = (date.today() - timedelta(days=1)).isoformat()
-    r = client.post("/api/v1/tasks", json={"title": "x", "due_date": past})
+    r = await client.post(API, json={"title": "x", "project_id": pid, "due_date": past})
     assert r.status_code == 422
-    assert client.get("/api/v1/tasks?limit=1000").status_code == 422
+    assert (await client.get(f"{API}?limit=1000")).status_code == 422

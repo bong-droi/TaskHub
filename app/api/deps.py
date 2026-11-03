@@ -1,23 +1,23 @@
-"""Dependency Injection: repo -> service -> router."""
-from functools import lru_cache
+"""Dependency Injection: get_db -> repositories -> service -> router."""
 from typing import Annotated
 
 from fastapi import Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.task_repository import TaskRepository
+from app.db.session import get_db
+from app.repositories.task_repository import (
+    ProjectRepository,
+    TaskRepository,
+    UserRepository,
+)
 from app.services.task_service import TaskService
 
-
-@lru_cache
-def get_task_repo() -> TaskRepository:
-    # Singleton in-memory; Ngày 2 đổi thành repo nhận DB session (dependency có yield)
-    return TaskRepository()
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
-def get_task_service(
-    repo: Annotated[TaskRepository, Depends(get_task_repo)],
-) -> TaskService:
-    return TaskService(repo)
+def get_task_service(db: DbSession) -> TaskService:
+    # Cả 3 repo dùng chung 1 session của request
+    return TaskService(TaskRepository(db), ProjectRepository(db), UserRepository(db))
 
 
 class Pagination:

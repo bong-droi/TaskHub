@@ -1,21 +1,10 @@
 from datetime import date, datetime
-from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.enums import TaskPriority, TaskStatus
 
-class TaskStatus(str, Enum):
-    TODO = "TODO"
-    IN_PROGRESS = "IN_PROGRESS"
-    IN_REVIEW = "IN_REVIEW"
-    DONE = "DONE"
-
-
-class TaskPriority(str, Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
-    URGENT = "URGENT"
+__all__ = ["TaskCreate", "TaskPriority", "TaskRead", "TaskStatus", "TaskUpdate"]
 
 
 class TaskBase(BaseModel):
@@ -26,6 +15,9 @@ class TaskBase(BaseModel):
 
 
 class TaskCreate(TaskBase):
+    project_id: int = Field(gt=0)
+    assignee_id: int | None = Field(default=None, gt=0)
+
     @field_validator("due_date")
     @classmethod
     def due_date_not_in_past(cls, v: date | None) -> date | None:
@@ -42,11 +34,15 @@ class TaskUpdate(BaseModel):
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
     due_date: date | None = None
+    assignee_id: int | None = Field(default=None, gt=0)
 
 
 class TaskRead(TaskBase):
-    model_config = ConfigDict(from_attributes=True)  # chuẩn bị cho ORM ở Ngày 2
+    model_config = ConfigDict(from_attributes=True)  # đọc thẳng từ ORM object
 
     id: int
+    project_id: int
+    assignee_id: int | None
+    created_by: int | None
     status: TaskStatus
     created_at: datetime
