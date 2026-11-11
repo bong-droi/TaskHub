@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status
 
-from app.api.deps import PaginationDep, TaskServiceDep
+from app.api.deps import CurrentUser, PaginationDep, TaskServiceDep
 from app.schemas.common import Page
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 
@@ -14,8 +14,8 @@ async def list_tasks(service: TaskServiceDep, page: PaginationDep):
 
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED, summary="Tạo task")
-async def create_task(payload: TaskCreate, service: TaskServiceDep):
-    return await service.create_task(payload)
+async def create_task(payload: TaskCreate, service: TaskServiceDep, user: CurrentUser):
+    return await service.create_task(payload, created_by=user.id)
 
 
 @router.get("/{task_id}", response_model=TaskRead, summary="Chi tiết task")
