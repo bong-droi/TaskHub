@@ -3,11 +3,8 @@
 from app.core.constants import ASSIGNEE_NOT_FOUND, PROJECT_NOT_FOUND, TASK_NOT_FOUND
 from app.core.exceptions import NotFoundException
 from app.models import Task
-from app.repositories.task_repository import (
-    ProjectRepository,
-    TaskRepository,
-    UserRepository,
-)
+from app.repositories.task_repository import ProjectRepository, TaskRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.task import TaskCreate, TaskUpdate
 
 
@@ -35,11 +32,11 @@ class TaskService:
         if assignee_id is not None and await self.users.get(assignee_id) is None:
             raise NotFoundException(ASSIGNEE_NOT_FOUND)
 
-    async def create_task(self, payload: TaskCreate) -> Task:
+    async def create_task(self, payload: TaskCreate, created_by: int) -> Task:
         if await self.projects.get(payload.project_id) is None:
             raise NotFoundException(PROJECT_NOT_FOUND)
         await self._ensure_assignee(payload.assignee_id)
-        return await self.tasks.create(payload.model_dump())
+        return await self.tasks.create({**payload.model_dump(), "created_by": created_by})
 
     async def update_task(self, task_id: int, payload: TaskUpdate) -> Task:
         task = await self.get_task(task_id)

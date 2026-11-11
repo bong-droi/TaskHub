@@ -116,3 +116,13 @@ async def test_blank_title_rejected_on_create_and_patch(client, seeded, title):
 
 async def test_title_is_trimmed(client, seeded):
     assert (await _new_task(client, seeded, title="  Học FastAPI  "))["title"] == "Học FastAPI"
+
+
+async def test_created_by_is_current_user(client, seeded):
+    r = await client.post(API, json={"title": "Của tôi", "project_id": seeded["project_id"]})
+    assert r.json()["created_by"] == seeded["user_id"]
+
+
+async def test_tasks_require_login(anon, seeded):
+    r = await anon.post(API, json={"title": "x", "project_id": seeded["project_id"]})
+    assert r.status_code == 401
