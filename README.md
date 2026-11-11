@@ -31,3 +31,11 @@ tests/test_tasks.py         # TestClient + dependency_overrides
 
 ## Endpoints
 `GET /api/v1/health`, `GET|POST /api/v1/tasks`, `GET|PATCH|DELETE /api/v1/tasks/{id}`
+
+## Lint & format (ruff)
+```bash
+ruff format .          # định dạng (indent 4 space, quote kép, 100 cột)
+ruff check .           # lint (import, bugbear, cấm print...)
+ruff check --fix .     # tự sửa phần sửa được
+```
+Chạy cả hai lệnh trước mỗi commit. Cấu hình ở `pyproject.toml`, `.editorconfig` giữ indent thống nhất trong editor.

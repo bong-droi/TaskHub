@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from app.api.v1.router import api_router
 from app.core.config import API_PREFIX, APP_NAME, APP_VERSION
+from app.core.exceptions import register_exception_handlers
 
 logger = logging.getLogger("taskhub")
 logging.basicConfig(level=logging.INFO)
@@ -23,4 +24,5 @@ app = FastAPI(
     description="TaskHub - Hệ thống quản lý công việc (Task Management API)",
     lifespan=lifespan,
 )
+register_exception_handlers(app)
 app.include_router(api_router, prefix=API_PREFIX)

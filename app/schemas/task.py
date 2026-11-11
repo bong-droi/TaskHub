@@ -1,26 +1,29 @@
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, field_validator
+
+from app.core.constants import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH, TITLE_MIN_LENGTH
+from app.schemas.base import BaseSchema
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     TODO = "TODO"
     IN_PROGRESS = "IN_PROGRESS"
     IN_REVIEW = "IN_REVIEW"
     DONE = "DONE"
 
 
-class TaskPriority(str, Enum):
+class TaskPriority(StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
     URGENT = "URGENT"
 
 
-class TaskBase(BaseModel):
-    title: str = Field(min_length=1, max_length=200, examples=["Viết tài liệu API"])
-    description: str | None = Field(default=None, max_length=2000)
+class TaskBase(BaseSchema):
+    title: str = Field(min_length=TITLE_MIN_LENGTH, max_length=TITLE_MAX_LENGTH)
+    description: str | None = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
     priority: TaskPriority = TaskPriority.MEDIUM
     due_date: date | None = None
 
@@ -34,14 +37,28 @@ class TaskCreate(TaskBase):
         return v
 
 
-class TaskUpdate(BaseModel):
-    """Dùng cho PATCH: mọi field đều optional."""
+class TaskUpdate(BaseSchema):
+    """Dùng cho PATCH. Field vắng mặt = giữ nguyên.
 
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=2000)
+    `exclude_unset=True` chỉ loại field client KHÔNG gửi, không loại `null` client gửi tường
+    minh. Vì vậy field bắt buộc (NOT NULL) phải chặn null ở validator bên dưới; chỉ
+    `description` và `due_date` (nullable thật sự) mới cho phép xoá bằng null.
+    """
+
+    title: str | None = Field(
+        default=None, min_length=TITLE_MIN_LENGTH, max_length=TITLE_MAX_LENGTH
+    )
+    description: str | None = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
     due_date: date | None = None
+
+    @field_validator("title", "status", "priority")
+    @classmethod
+    def required_fields_cannot_be_null(cls, v):  # noqa: ANN001, ANN206
+        if v is None:
+            raise ValueError("Không được để null")
+        return v
 
 
 class TaskRead(TaskBase):
