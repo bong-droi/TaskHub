@@ -1,6 +1,7 @@
-"""Tầng business logic (async). Không biết gì về HTTP ngoài HTTPException."""
-from fastapi import HTTPException, status
+"""Tầng business logic (async). Chỉ raise exception nghiệp vụ, không biết gì về HTTP."""
 
+from app.core.constants import ASSIGNEE_NOT_FOUND, PROJECT_NOT_FOUND, TASK_NOT_FOUND
+from app.core.exceptions import NotFoundException
 from app.models import Task
 from app.repositories.task_repository import (
     ProjectRepository,
@@ -8,10 +9,6 @@ from app.repositories.task_repository import (
     UserRepository,
 )
 from app.schemas.task import TaskCreate, TaskUpdate
-
-
-def _not_found(what: str) -> HTTPException:
-    return HTTPException(status.HTTP_404_NOT_FOUND, f"{what} không tồn tại")
 
 
 class TaskService:
@@ -31,16 +28,16 @@ class TaskService:
     async def get_task(self, task_id: int) -> Task:
         task = await self.tasks.get(task_id)
         if task is None:
-            raise _not_found("Task")
+            raise NotFoundException(TASK_NOT_FOUND)  # chỉ MỘT chỗ raise cho Task
         return task
 
     async def _ensure_assignee(self, assignee_id: int | None) -> None:
         if assignee_id is not None and await self.users.get(assignee_id) is None:
-            raise _not_found("Assignee")
+            raise NotFoundException(ASSIGNEE_NOT_FOUND)
 
     async def create_task(self, payload: TaskCreate) -> Task:
         if await self.projects.get(payload.project_id) is None:
-            raise _not_found("Project")
+            raise NotFoundException(PROJECT_NOT_FOUND)
         await self._ensure_assignee(payload.assignee_id)
         return await self.tasks.create(payload.model_dump())
 

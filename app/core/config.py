@@ -1,4 +1,5 @@
 """Cấu hình cơ bản. Ngày 6 sẽ nâng cấp lên pydantic-settings."""
+
 import os
 
 APP_NAME = "TaskHub"

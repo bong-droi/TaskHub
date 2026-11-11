@@ -14,7 +14,8 @@ from app.models.enums import UserRole
 async def session_factory():
     """SQLite in-memory riêng cho mỗi test -> test độc lập, không đụng file .db."""
     engine = create_async_engine(
-        "sqlite+aiosqlite://", poolclass=StaticPool,
+        "sqlite+aiosqlite://",
+        poolclass=StaticPool,
         connect_args={"check_same_thread": False},
     )
     enable_sqlite_fk(engine)

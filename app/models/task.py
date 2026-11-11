@@ -26,9 +26,7 @@ class Task(CreatedAtMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     # nullable tạm thời: Ngày 3 (Auth) sẽ gán từ current_user
-    created_by: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL")
-    )
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[TaskStatus] = mapped_column(
