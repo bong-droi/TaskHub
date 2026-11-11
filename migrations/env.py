@@ -1,4 +1,5 @@
 """Alembic async env: đọc DATABASE_URL từ app.core.config, metadata từ Base."""
+
 import asyncio
 from logging.config import fileConfig
 
@@ -20,8 +21,10 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=DATABASE_URL, target_metadata=target_metadata,
-        literal_binds=True, render_as_batch=True,
+        url=DATABASE_URL,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        render_as_batch=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -30,8 +33,10 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     # render_as_batch: cho phép ALTER TABLE trên SQLite
     context.configure(
-        connection=connection, target_metadata=target_metadata,
-        render_as_batch=True, compare_type=True,
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=True,
+        compare_type=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -40,7 +45,8 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.", poolclass=pool.NullPool,
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

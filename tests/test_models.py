@@ -1,7 +1,8 @@
 """Kiểm tra relationships & cascade ở tầng ORM."""
+
+import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-import pytest
 
 from app.models import Label, Project, Task, User
 from app.models.task import task_labels

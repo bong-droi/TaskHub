@@ -13,8 +13,7 @@ async def list_tasks(service: TaskServiceDep, page: PaginationDep):
     return Page[TaskRead](items=items, total=total, skip=page.skip, limit=page.limit)
 
 
-@router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED,
-             summary="Tạo task")
+@router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED, summary="Tạo task")
 async def create_task(payload: TaskCreate, service: TaskServiceDep):
     return await service.create_task(payload)
 
@@ -29,7 +28,6 @@ async def update_task(task_id: int, payload: TaskUpdate, service: TaskServiceDep
     return await service.update_task(task_id, payload)
 
 
-@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT,
-               summary="Xoá task")
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Xoá task")
 async def delete_task(task_id: int, service: TaskServiceDep):
     await service.delete_task(task_id)

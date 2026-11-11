@@ -1,30 +1,30 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class UserRole(str, Enum):
+class UserRole(StrEnum):
     ADMIN = "ADMIN"
     MEMBER = "MEMBER"
 
 
-class WorkspaceRole(str, Enum):
+class WorkspaceRole(StrEnum):
     OWNER = "OWNER"
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"
 
 
-class ProjectStatus(str, Enum):
+class ProjectStatus(StrEnum):
     ACTIVE = "ACTIVE"
     ARCHIVED = "ARCHIVED"
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     TODO = "TODO"
     IN_PROGRESS = "IN_PROGRESS"
     IN_REVIEW = "IN_REVIEW"
     DONE = "DONE"
 
 
-class TaskPriority(str, Enum):
+class TaskPriority(StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"

@@ -58,3 +58,16 @@ tests/                       # API tests + model/cascade tests
 - SQLite cần bật `PRAGMA foreign_keys=ON` (đã làm trong `db/session.py`).
 - `tasks.created_by` đang nullable; Ngày 3 (Auth) sẽ gán từ `current_user`.
 - Repository tự `commit`; có thể nâng cấp lên Unit of Work nếu cần transaction đa repo.
+
+## Lint & format (ruff)
+```bash
+ruff format .          # định dạng (indent 4 space, quote kép, 100 cột)
+ruff check .           # lint (import, bugbear, cấm print...)
+ruff check --fix .     # tự sửa phần sửa được
+```
+Chạy cả hai lệnh trước mỗi commit. Cấu hình ở `pyproject.toml`, `.editorconfig` giữ indent thống nhất.
+
+## Quy ước (rút ra từ review)
+- PATCH: `exclude_unset` không loại `null` gửi tường minh -> field NOT NULL phải chặn null trong `*Update`.
+- Service raise `NotFoundException` (`core/exceptions.py`), message nằm trong `core/constants.py`.
+- Schema đầu vào kế thừa `BaseSchema` (tự cắt khoảng trắng đầu/cuối).
