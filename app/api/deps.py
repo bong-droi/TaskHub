@@ -13,11 +13,19 @@ from app.core.exceptions import UnauthorizedException
 from app.core.security import ACCESS, decode_token
 from app.db.session import get_db
 from app.models import User
-from app.repositories.task_repository import ProjectRepository, TaskRepository
+from app.repositories.project_repository import ProjectRepository
+from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import RefreshTokenRepository, UserRepository
+from app.repositories.workspace_repository import (
+    WorkspaceMemberRepository,
+    WorkspaceRepository,
+)
+from app.services.access import AccessControl
 from app.services.auth_service import AuthService
+from app.services.project_service import ProjectService
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
+from app.services.workspace_service import WorkspaceService
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
@@ -25,9 +33,28 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{API_PREFIX}/auth/login")
 
 
+def get_access_control(db: DbSession) -> AccessControl:
+    return AccessControl(WorkspaceMemberRepository(db))
+
+
 def get_task_service(db: DbSession) -> TaskService:
     # Các repo dùng chung 1 session của request
-    return TaskService(TaskRepository(db), ProjectRepository(db), UserRepository(db))
+    return TaskService(
+        TaskRepository(db), ProjectRepository(db), UserRepository(db), get_access_control(db)
+    )
+
+
+def get_workspace_service(db: DbSession) -> WorkspaceService:
+    return WorkspaceService(
+        WorkspaceRepository(db),
+        WorkspaceMemberRepository(db),
+        UserRepository(db),
+        get_access_control(db),
+    )
+
+
+def get_project_service(db: DbSession) -> ProjectService:
+    return ProjectService(ProjectRepository(db), WorkspaceRepository(db), get_access_control(db))
 
 
 def get_auth_service(db: DbSession) -> AuthService:
@@ -64,4 +91,6 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 PaginationDep = Annotated[Pagination, Depends()]
