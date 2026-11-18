@@ -1,0 +1,13 @@
+[tool.ruff]
+extend-exclude = ["migrations/versions"]  # file Alembic sinh tự động
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes, I: sắp xếp import, UP: cú pháp Python mới,
+# B: bugbear, T20: cấm print() (dùng logging)
+select = ["E", "W", "F", "I", "UP", "B", "T20"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

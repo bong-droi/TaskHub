@@ -1,0 +1,30 @@
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from app.api.v1.router import api_router
+from app.core.config import API_PREFIX, APP_NAME, APP_VERSION
+from app.core.exceptions import register_exception_handlers
+from app.db.session import engine
+
+logger = logging.getLogger("taskhub")
+logging.basicConfig(level=logging.INFO)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("%s đang khởi động...", APP_NAME)
+    yield
+    await engine.dispose()  # đóng connection pool khi tắt app
+    logger.info("%s đã dừng.", APP_NAME)
+
+
+app = FastAPI(
+    title=APP_NAME,
+    version=APP_VERSION,
+    description="TaskHub - Hệ thống quản lý công việc (Task Management API)",
+    lifespan=lifespan,
+)
+register_exception_handlers(app)
+app.include_router(api_router, prefix=API_PREFIX)
