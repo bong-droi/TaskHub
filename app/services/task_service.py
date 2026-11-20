@@ -14,7 +14,7 @@ from app.core.exceptions import (
     ForbiddenException,
     NotFoundException,
 )
-from app.core.permissions import READ_ROLES, WRITE_ROLES
+from app.core.permissions import READ_ROLES, WRITE_ROLES, can_delete_task
 from app.models import Project, Task, User
 from app.models.enums import ProjectStatus, UserRole, WorkspaceRole
 from app.repositories.project_repository import ProjectRepository
@@ -89,8 +89,6 @@ class TaskService:
 
     async def delete_task(self, user: User, task_id: int) -> None:
         task, _, role = await self._load(user, task_id, READ_ROLES)
-        # Resource ownership: OWNER (và ADMIN) xoá mọi task; EDITOR chỉ xoá task do mình tạo
-        is_creator = task.created_by == user.id
-        if role != WorkspaceRole.OWNER and not (role == WorkspaceRole.EDITOR and is_creator):
+        if not can_delete_task(role, task, user):
             raise ForbiddenException(INSUFFICIENT_PERMISSION)
         await self.tasks.delete(task)

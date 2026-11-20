@@ -116,3 +116,39 @@ async def test_remove_member(team, anon):
 async def test_members_hidden_from_outsiders(team, anon):
     r = await anon.get(f"{WS}/{team.ws['id']}/members", headers=team.h["dave"])
     assert r.status_code == 404
+
+
+async def test_concurrent_duplicate_invite_returns_409_not_500(
+    team, anon, monkeypatch, session_factory
+):
+    """Hai lời mời cùng lúc: cả hai qua bước kiểm tra "đã là thành viên chưa" rồi mới ghi.
+    Mô phỏng bằng cách làm bước kiểm tra luôn trả "chưa" cho bob, để khoá chính của DB phải chặn."""
+    from sqlalchemy import func, select
+
+    from app.models import WorkspaceMember
+    from app.repositories.workspace_repository import WorkspaceMemberRepository
+
+    original = WorkspaceMemberRepository.get_member
+
+    async def blind_for_bob(self, workspace_id, user_id):
+        if user_id == team.ids["bob"]:
+            return None  # bob đã là EDITOR nhưng kiểm tra "không thấy"
+        return await original(self, workspace_id, user_id)
+
+    monkeypatch.setattr(WorkspaceMemberRepository, "get_member", blind_for_bob)
+    url = f"{WS}/{team.ws['id']}/members"
+    r = await anon.post(url, json={"email": "bob@t.dev", "role": "VIEWER"}, headers=team.h["alice"])
+    assert r.status_code == 409 and r.json() == {"detail": ALREADY_MEMBER}
+    async with session_factory() as db:  # vẫn đúng 1 dòng, role cũ không bị ghi đè
+        rows = (
+            await db.scalars(
+                select(WorkspaceMember).where(WorkspaceMember.user_id == team.ids["bob"])
+            )
+        ).all()
+        assert len(rows) == 1 and rows[0].role.value == "EDITOR"
+        total = (
+            select(func.count())
+            .select_from(WorkspaceMember)
+            .where(WorkspaceMember.workspace_id == team.ws["id"])
+        )
+        assert await db.scalar(total) == 3  # alice, bob, carol

@@ -6,7 +6,12 @@ import pytest
 
 from app.core.constants import INSUFFICIENT_PERMISSION
 from app.core.exceptions import ForbiddenException, NotFoundException
-from app.core.permissions import MANAGE_ROLES, READ_ROLES, WRITE_ROLES
+from app.core.permissions import (
+    MANAGE_ROLES,
+    READ_ROLES,
+    WRITE_ROLES,
+    can_delete_task,
+)
 from app.models.enums import UserRole, WorkspaceRole
 from app.services.access import AccessControl
 
@@ -55,3 +60,24 @@ async def test_system_admin_bypasses_membership():
     access = _access(None)
     assert await access.require(admin, 1, MANAGE_ROLES, "nf") == WorkspaceRole.OWNER
     access.members.get_member.assert_not_called()
+
+
+# ---- quy tắc phụ thuộc resource: nằm cùng ma trận, test cùng kiểu parametrize ----
+@pytest.mark.parametrize(
+    ("role", "is_creator", "expected"),
+    [
+        (OWN, True, True), (OWN, False, True),      # OWNER xoá mọi task
+        (EDT, True, True), (EDT, False, False),     # EDITOR chỉ xoá task của mình
+        (VWR, True, False), (VWR, False, False),    # VIEWER không bao giờ xoá được
+    ],
+)  # fmt: skip
+def test_can_delete_task_matrix(role, is_creator, expected):
+    user = MagicMock(id=1)
+    task = MagicMock(created_by=1 if is_creator else 2)
+    assert can_delete_task(role, task, user) is expected
+
+
+def test_task_without_creator_can_only_be_deleted_by_owner():
+    user, orphan = MagicMock(id=1), MagicMock(created_by=None)
+    assert can_delete_task(OWN, orphan, user) is True
+    assert can_delete_task(EDT, orphan, user) is False

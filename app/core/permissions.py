@@ -9,10 +9,28 @@
 | Sửa/xoá workspace, xoá project, quản lý thành viên | x | | |
 
 User có role toàn hệ thống ADMIN được coi như OWNER của mọi workspace.
+
+Quy tắc đơn giản là tập role (READ/WRITE/MANAGE_ROLES). Quy tắc phụ thuộc vào resource
+(ai tạo task, ai viết comment) là các hàm `can_*` bên dưới. Service KHÔNG tự viết điều kiện
+phân quyền, chỉ gọi các hằng/hàm ở đây, để file này luôn là nguồn sự thật duy nhất.
 """
 
+from typing import TYPE_CHECKING
+
 from app.models.enums import WorkspaceRole
+
+if TYPE_CHECKING:
+    from app.models import Task, User
 
 READ_ROLES = frozenset(WorkspaceRole)
 WRITE_ROLES = frozenset({WorkspaceRole.OWNER, WorkspaceRole.EDITOR})
 MANAGE_ROLES = frozenset({WorkspaceRole.OWNER})
+
+
+def can_delete_task(role: WorkspaceRole, task: "Task", user: "User") -> bool:
+    """OWNER xoá mọi task; EDITOR chỉ xoá task do chính mình tạo; VIEWER không xoá được.
+
+    Task có `created_by = None` (người tạo đã bị xoá) chỉ OWNER mới xoá được."""
+    if role == WorkspaceRole.OWNER:
+        return True
+    return role == WorkspaceRole.EDITOR and task.created_by == user.id

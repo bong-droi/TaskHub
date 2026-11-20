@@ -1,3 +1,5 @@
+from sqlalchemy.exc import IntegrityError
+
 from app.core.constants import (
     ALREADY_MEMBER,
     CANNOT_REMOVE_OWNER,
@@ -74,9 +76,15 @@ class WorkspaceService:
             raise NotFoundException(USER_NOT_FOUND)
         if await self.members.get_member(workspace_id, target.id):
             raise ConflictException(ALREADY_MEMBER)
-        member = await self.members.create(
-            {"workspace_id": workspace_id, "user_id": target.id, "role": payload.role}
-        )
+        try:
+            member = await self.members.create(
+                {"workspace_id": workspace_id, "user_id": target.id, "role": payload.role}
+            )
+        except (
+            IntegrityError
+        ):  # 2 lời mời cùng lúc: cả hai qua bước kiểm tra, khoá chính chặn bản sau
+            await self.members.session.rollback()
+            raise ConflictException(ALREADY_MEMBER) from None
         return MemberRead(
             user_id=target.id, email=target.email, full_name=target.full_name, role=member.role
         )
