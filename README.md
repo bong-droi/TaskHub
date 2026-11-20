@@ -7,6 +7,7 @@ Sample app xây dần theo từng ngày. Kiến trúc: **Router → Service → 
 | 1 | Core Setup, Routing, Pydantic v2, DI (in-memory) | `day-1` |
 | 2 | SQLAlchemy 2.x async, Repository Pattern, Alembic | `day-2` |
 | 3 | Authentication & Security: bcrypt, JWT access/refresh, profile | `day-3` |
+| 4 | Authorization & RBAC, Workspace, Project | `day-4` |
 
 ## Chạy nhanh (SQLite)
 ```bash
@@ -39,7 +40,7 @@ Thử tạo task (cần token): `POST /api/v1/tasks` với `{"title": "Hello", "
 - Toàn bộ `/tasks` yêu cầu đăng nhập; `tasks.created_by` lấy từ user hiện tại.
 - Lỗi auth là exception nghiệp vụ (`UnauthorizedException`, `ConflictException`...) + message trong `core/constants.py`.
 - Schema chứa mật khẩu **không** kế thừa `BaseSchema` (không được strip mật khẩu).
-- Chưa làm (các ngày sau): RBAC theo workspace/project, middleware, Redis cache, Docker.
+
 
 ## PostgreSQL / MySQL
 Đổi `DATABASE_URL` (xem `.env.example`) và cài driver `asyncpg` hoặc `aiomysql`, rồi chạy lại `alembic upgrade head`.
@@ -67,7 +68,8 @@ app/
 ├── models/                  # 8 bảng: users, workspaces, workspace_members, projects,
 │                            #         tasks, labels, task_labels, comments
 ├── repositories/base.py     # BaseRepository[T]: get/list/count/create/update/delete
-├── services/                # business logic (async)
+├── core/permissions.py      # ma trận quyền theo role
+├── services/                # business logic (async), access.py = kiểm tra quyền
 ├── schemas/                 # Pydantic v2 + Page[T]
 └── api/                     # deps.py (DI), v1/endpoints
 migrations/                  # Alembic async env + 0001_initial_schema, 0002_add_refresh_tokens
@@ -80,6 +82,31 @@ tests/                       # API tests + model/cascade tests
 - SQLite cần bật `PRAGMA foreign_keys=ON` (đã làm trong `db/session.py`).
 - `tasks.created_by` đang nullable; Ngày 3 (Auth) sẽ gán từ `current_user`.
 - Repository tự `commit`; có thể nâng cấp lên Unit of Work nếu cần transaction đa repo.
+
+## Phân quyền RBAC (Ngày 4)
+Role trong workspace: **OWNER**, **EDITOR**, **VIEWER**. User có role hệ thống **ADMIN** (seed) được coi như OWNER của mọi workspace.
+
+| Hành động | OWNER | EDITOR | VIEWER |
+|---|:-:|:-:|:-:|
+| Xem workspace, project, task | x | x | x |
+| Tạo/sửa project, archive project | x | x | |
+| Tạo/sửa task | x | x | |
+| Xoá task | mọi task | chỉ task mình tạo | |
+| Sửa/xoá workspace, xoá project, mời/xoá thành viên | x | | |
+
+- **Không phải thành viên -> 404** (không lộ resource có tồn tại hay không); **là thành viên nhưng thiếu quyền -> 403**.
+- Ma trận quyền nằm một chỗ: `app/core/permissions.py`; kiểm tra quyền: `app/services/access.py`.
+- Assignee của task phải là thành viên của workspace. Project đã archive là read-only (409 khi sửa/tạo task).
+- `GET /tasks` chỉ trả task thuộc workspace mình là thành viên.
+
+| Endpoint | Quyền |
+|---|---|
+| `POST/GET /workspaces`, `GET /workspaces/{id}` | đăng nhập / thành viên |
+| `PATCH/DELETE /workspaces/{id}` | OWNER |
+| `POST/GET /workspaces/{id}/members`, `DELETE .../members/{user_id}` | OWNER mời/xoá, thành viên xem |
+| `POST/GET /workspaces/{id}/projects` | OWNER/EDITOR tạo, thành viên xem |
+| `GET/PATCH /projects/{id}`, `POST /projects/{id}/archive` | thành viên xem, OWNER/EDITOR sửa |
+| `DELETE /projects/{id}` | OWNER |
 
 ## Lint & format (ruff)
 ```bash
