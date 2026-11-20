@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()  # đọc .env nếu có
 
 APP_NAME = "TaskHub"
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.5.0"
 API_PREFIX = "/api/v1"
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./taskhub.db")
 

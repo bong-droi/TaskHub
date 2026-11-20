@@ -10,6 +10,7 @@ from app.core.permissions import (
     MANAGE_ROLES,
     READ_ROLES,
     WRITE_ROLES,
+    can_delete_comment,
     can_delete_task,
 )
 from app.models.enums import UserRole, WorkspaceRole
@@ -81,3 +82,17 @@ def test_task_without_creator_can_only_be_deleted_by_owner():
     user, orphan = MagicMock(id=1), MagicMock(created_by=None)
     assert can_delete_task(OWN, orphan, user) is True
     assert can_delete_task(EDT, orphan, user) is False
+
+
+@pytest.mark.parametrize(
+    ("role", "is_author", "expected"),
+    [
+        (OWN, True, True), (OWN, False, True),      # OWNER xoá mọi comment
+        (EDT, True, True), (EDT, False, False),     # tác giả xoá comment của mình
+        (VWR, True, True), (VWR, False, False),     # VIEWER cũ (từng là EDITOR)
+    ],
+)  # fmt: skip
+def test_can_delete_comment_matrix(role, is_author, expected):
+    user = MagicMock(id=1)
+    comment = MagicMock(author_id=1 if is_author else 2)
+    assert can_delete_comment(role, comment, user) is expected

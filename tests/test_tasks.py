@@ -30,9 +30,9 @@ async def test_crud_flow(client, seeded):
 async def test_pagination(client, seeded):
     for i in range(5):
         await client.post(API, json={"title": f"T{i}", "project_id": seeded["project_id"]})
-    page = (await client.get(f"{API}?skip=1&limit=2")).json()
-    assert page["total"] == 5 and len(page["items"]) == 2
-    assert [t["title"] for t in page["items"]] == ["T1", "T2"]
+    page = (await client.get(f"{API}?page=2&limit=2")).json()
+    assert page["total"] == 5 and page["page"] == 2 and page["pages"] == 3
+    assert [t["title"] for t in page["items"]] == ["T2", "T3"]
 
 
 async def test_assign_user(client, seeded):

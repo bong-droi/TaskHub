@@ -13,6 +13,8 @@ from app.core.exceptions import UnauthorizedException
 from app.core.security import ACCESS, decode_token
 from app.db.session import get_db
 from app.models import User
+from app.repositories.comment_repository import CommentRepository
+from app.repositories.label_repository import LabelRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import RefreshTokenRepository, UserRepository
@@ -22,6 +24,8 @@ from app.repositories.workspace_repository import (
 )
 from app.services.access import AccessControl
 from app.services.auth_service import AuthService
+from app.services.comment_service import CommentService
+from app.services.label_service import LabelService
 from app.services.project_service import ProjectService
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
@@ -40,7 +44,21 @@ def get_access_control(db: DbSession) -> AccessControl:
 def get_task_service(db: DbSession) -> TaskService:
     # Các repo dùng chung 1 session của request
     return TaskService(
-        TaskRepository(db), ProjectRepository(db), UserRepository(db), get_access_control(db)
+        TaskRepository(db),
+        ProjectRepository(db),
+        UserRepository(db),
+        get_access_control(db),
+        LabelRepository(db),
+    )
+
+
+def get_label_service(db: DbSession) -> LabelService:
+    return LabelService(LabelRepository(db), ProjectRepository(db), get_access_control(db))
+
+
+def get_comment_service(db: DbSession) -> CommentService:
+    return CommentService(
+        CommentRepository(db), TaskRepository(db), ProjectRepository(db), get_access_control(db)
     )
 
 
@@ -78,13 +96,19 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Db
 
 
 class Pagination:
+    """Phân trang kiểu page + limit (theo đặc tả). page bắt đầu từ 1."""
+
     def __init__(
         self,
-        skip: Annotated[int, Query(ge=0)] = 0,
+        page: Annotated[int, Query(ge=1)] = 1,
         limit: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
     ) -> None:
-        self.skip = skip
+        self.page = page
         self.limit = limit
+
+    @property
+    def skip(self) -> int:
+        return (self.page - 1) * self.limit
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -93,4 +117,6 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+LabelServiceDep = Annotated[LabelService, Depends(get_label_service)]
+CommentServiceDep = Annotated[CommentService, Depends(get_comment_service)]
 PaginationDep = Annotated[Pagination, Depends()]
