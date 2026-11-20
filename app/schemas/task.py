@@ -5,8 +5,16 @@ from pydantic import ConfigDict, Field, field_validator
 from app.core.constants import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH, TITLE_MIN_LENGTH
 from app.models.enums import TaskPriority, TaskStatus
 from app.schemas.base import BaseSchema
+from app.schemas.label import LabelRead
 
-__all__ = ["TaskCreate", "TaskPriority", "TaskRead", "TaskStatus", "TaskUpdate"]
+__all__ = [
+    "TaskCreate",
+    "TaskCreateInProject",
+    "TaskPriority",
+    "TaskRead",
+    "TaskStatus",
+    "TaskUpdate",
+]
 
 
 class TaskBase(BaseSchema):
@@ -18,8 +26,10 @@ class TaskBase(BaseSchema):
     due_date: date | None = None
 
 
-class TaskCreate(TaskBase):
-    project_id: int = Field(gt=0)
+class _TaskCreateBase(TaskBase):
+    """Phần chung của mọi schema TẠO task (không đặt vào TaskBase vì TaskRead cũng kế thừa:
+    task cũ có due_date đã qua vẫn phải đọc được)."""
+
     assignee_id: int | None = Field(default=None, gt=0)
 
     @field_validator("due_date")
@@ -28,6 +38,14 @@ class TaskCreate(TaskBase):
         if v is not None and v < date.today():
             raise ValueError("due_date không được ở quá khứ")
         return v
+
+
+class TaskCreate(_TaskCreateBase):
+    project_id: int = Field(gt=0)
+
+
+class TaskCreateInProject(_TaskCreateBase):
+    """Body của POST /projects/{id}/tasks: project_id lấy từ URL, không nhận từ body."""
 
 
 class TaskUpdate(BaseSchema):
@@ -65,3 +83,4 @@ class TaskRead(TaskBase):
     created_by: int | None
     status: TaskStatus
     created_at: datetime
+    labels: list[LabelRead] = []

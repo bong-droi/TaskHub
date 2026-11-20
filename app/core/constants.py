@@ -43,3 +43,17 @@ ASSIGNEE_NOT_IN_WORKSPACE = "Assignee không phải thành viên của workspace
 
 # Phân quyền
 INSUFFICIENT_PERMISSION = "Bạn không có quyền thực hiện thao tác này"
+
+# Label / Comment
+LABEL_NAME_MAX_LENGTH = 50
+DEFAULT_LABEL_COLOR = "#808080"
+LABEL_COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
+COMMENT_MAX_LENGTH = 2000
+LABEL_NOT_FOUND = "Label không tồn tại"
+LABEL_NAME_EXISTS = "Tên label đã tồn tại trong project"
+LABEL_NOT_IN_PROJECT = "Label không thuộc project của task"
+COMMENT_NOT_FOUND = "Comment không tồn tại"
+
+# Lỗi hệ thống
+INTERNAL_ERROR = "Lỗi hệ thống, vui lòng thử lại sau"
+DATA_CONFLICT = "Dữ liệu xung đột với dữ liệu hiện có"

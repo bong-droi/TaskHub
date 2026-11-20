@@ -38,8 +38,9 @@ class Task(CreatedAtMixin, Base):
     due_date: Mapped[date | None] = mapped_column(Date)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")  # noqa: F821
+    # lazy="selectin": nạp labels cùng lúc với task (async không cho lazy-load ngầm)
     labels: Mapped[list["Label"]] = relationship(  # noqa: F821
-        secondary=task_labels, back_populates="tasks"
+        secondary=task_labels, back_populates="tasks", lazy="selectin"
     )
     comments: Mapped[list["Comment"]] = relationship(  # noqa: F821
         back_populates="task", cascade="all, delete-orphan"

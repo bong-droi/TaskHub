@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app.api.v1.router import api_router
 from app.core.config import API_PREFIX, APP_NAME, APP_VERSION
 from app.core.exceptions import register_exception_handlers
+from app.core.middleware import RequestContextMiddleware
 from app.db.session import engine
 
 logger = logging.getLogger("taskhub")
@@ -27,4 +28,5 @@ app = FastAPI(
     lifespan=lifespan,
 )
 register_exception_handlers(app)
+app.add_middleware(RequestContextMiddleware)
 app.include_router(api_router, prefix=API_PREFIX)

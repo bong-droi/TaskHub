@@ -8,6 +8,7 @@ Sample app xây dần theo từng ngày. Kiến trúc: **Router → Service → 
 | 2 | SQLAlchemy 2.x async, Repository Pattern, Alembic | `day-2` |
 | 3 | Authentication & Security: bcrypt, JWT access/refresh, profile | `day-3` |
 | 4 | Authorization & RBAC, Workspace, Project | `day-4` |
+| 5 | Task nâng cao (lọc, phân trang), Label, Comment, Middleware | `day-5` |
 
 ## Chạy nhanh (SQLite)
 ```bash
@@ -69,6 +70,7 @@ app/
 │                            #         tasks, labels, task_labels, comments
 ├── repositories/base.py     # BaseRepository[T]: get/list/count/create/update/delete
 ├── core/permissions.py      # ma trận quyền theo role
+├── core/middleware.py       # request id, process time, access log
 ├── services/                # business logic (async), access.py = kiểm tra quyền
 ├── schemas/                 # Pydantic v2 + Page[T]
 └── api/                     # deps.py (DI), v1/endpoints
@@ -107,6 +109,36 @@ Role trong workspace: **OWNER**, **EDITOR**, **VIEWER**. User có role hệ th�
 | `POST/GET /workspaces/{id}/projects` | OWNER/EDITOR tạo, thành viên xem |
 | `GET/PATCH /projects/{id}`, `POST /projects/{id}/archive` | thành viên xem, OWNER/EDITOR sửa |
 | `DELETE /projects/{id}` | OWNER |
+
+## Task nâng cao, Label, Comment, Middleware (Ngày 5)
+
+### Phân trang và lọc
+Mọi endpoint danh sách dùng `?page=1&limit=20` (`page` từ 1, `limit` tối đa 100) và trả về:
+`{"items": [...], "total": 42, "page": 1, "limit": 20, "pages": 3}`.
+
+`GET /projects/{id}/tasks` lọc được theo `status`, `priority`, `assignee_id`, `label_id` (kết hợp bằng AND):
+```
+GET /api/v1/projects/1/tasks?status=TODO&priority=HIGH&assignee_id=2&page=1&limit=10
+```
+
+| Endpoint | Quyền |
+|---|---|
+| `GET/POST /projects/{id}/tasks` | thành viên xem, OWNER/EDITOR tạo (project_id lấy từ URL) |
+| `PATCH /tasks/{id}` (đổi status, priority, due_date, assignee) | OWNER/EDITOR |
+| `POST/GET /projects/{id}/labels`, `PATCH/DELETE /labels/{id}` | thành viên xem, OWNER/EDITOR ghi |
+| `POST/DELETE /tasks/{id}/labels/{label_id}` | OWNER/EDITOR (idempotent) |
+| `POST/GET /tasks/{id}/comments` | OWNER/EDITOR thêm, thành viên xem |
+| `DELETE /comments/{id}` | tác giả, hoặc OWNER |
+
+- Tên label duy nhất trong project (không phân biệt hoa thường); màu dạng `#RRGGBB`.
+- Chỉ gắn được label cùng project với task (400 nếu khác project).
+- Task trả về kèm danh sách `labels`.
+- Project đã archive: không tạo/sửa task, label, comment (409); vẫn xem và xoá được.
+
+### Middleware và xử lý lỗi
+- Mọi response có `X-Request-ID` (nhận từ client nếu hợp lệ, không thì tự sinh) và `X-Process-Time`; mỗi request được ghi một dòng access log kèm request id.
+- Lỗi không lường trước trả `500` chung chung `{"detail": ..., "request_id": ...}`, **không lộ stack trace**; chi tiết chỉ nằm trong log, tra theo `request_id`.
+- Vi phạm ràng buộc DB lọt qua service (hai request cùng lúc) trả `409` thay vì `500`.
 
 ## Lint & format (ruff)
 ```bash

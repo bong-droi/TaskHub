@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -7,6 +7,7 @@ from app.models.task import task_labels
 
 class Label(Base):
     __tablename__ = "labels"
+    __table_args__ = (UniqueConstraint("project_id", "name"),)  # tên label duy nhất trong project
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(

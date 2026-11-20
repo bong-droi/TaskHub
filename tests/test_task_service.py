@@ -15,8 +15,8 @@ USER = MagicMock(id=7)
 
 @pytest.fixture
 def parts():
-    tasks, projects, users, access = AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock()
-    return TaskService(tasks, projects, users, access), tasks, projects, access
+    tasks, projects, users, access, labels = (AsyncMock() for _ in range(5))
+    return TaskService(tasks, projects, users, access, labels), tasks, projects, access
 
 
 async def test_create_task_goes_through_injected_dependencies(parts):

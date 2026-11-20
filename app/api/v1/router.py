@@ -1,7 +1,17 @@
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
-from app.api.v1.endpoints import auth, health, projects, tasks, users, workspaces
+from app.api.v1.endpoints import (
+    auth,
+    comments,
+    health,
+    labels,
+    project_tasks,
+    projects,
+    tasks,
+    users,
+    workspaces,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -11,4 +21,7 @@ api_router.include_router(users.router)
 protected = [Depends(get_current_user)]
 api_router.include_router(workspaces.router, dependencies=protected)
 api_router.include_router(projects.router, dependencies=protected)
+api_router.include_router(project_tasks.router, dependencies=protected)
 api_router.include_router(tasks.router, dependencies=protected)
+api_router.include_router(labels.router, dependencies=protected)
+api_router.include_router(comments.router, dependencies=protected)

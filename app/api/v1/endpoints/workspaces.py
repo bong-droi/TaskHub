@@ -25,7 +25,7 @@ async def create_workspace(
 @router.get("", response_model=Page[WorkspaceRead], summary="Workspace của tôi")
 async def list_workspaces(user: CurrentUser, service: WorkspaceServiceDep, page: PaginationDep):
     items, total = await service.list_for(user, page.skip, page.limit)
-    return Page[WorkspaceRead](items=items, total=total, skip=page.skip, limit=page.limit)
+    return Page[WorkspaceRead](items=items, total=total, page=page.page, limit=page.limit)
 
 
 @router.get("/{workspace_id}", response_model=WorkspaceRead, summary="Chi tiết workspace")
