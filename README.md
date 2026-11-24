@@ -140,6 +140,25 @@ GET /api/v1/projects/1/tasks?status=TODO&priority=HIGH&assignee_id=2&page=1&limi
 - Lỗi không lường trước trả `500` chung chung `{"detail": ..., "request_id": ...}`, **không lộ stack trace**; chi tiết chỉ nằm trong log, tra theo `request_id`.
 - Vi phạm ràng buộc DB lọt qua service (hai request cùng lúc) trả `409` thay vì `500`.
 
+### Giới hạn đầu vào (tránh lỗi 500 do số quá lớn)
+Mọi số nguyên đầu vào đều có cận trên, vì số vượt giới hạn của DB sẽ làm truy vấn lỗi (500) thay vì từ chối bằng 422:
+
+| Đầu vào | Giới hạn | Định nghĩa |
+|---|---|---|
+| id trên URL (`/projects/{project_id}`, ...) | `1 .. 2147483647` | `IdPath` trong `app/api/params.py` |
+| id trong body, filter `assignee_id`, `label_id` | `1 .. 2147483647` | `DbId` trong `app/schemas/types.py` |
+| `page` | `1 .. 100000` (offset tối đa 10 triệu) | `Pagination` trong `app/api/deps.py` |
+
+Khi thêm endpoint mới, **dùng `IdPath` cho id trên URL và `DbId` cho id trong schema**. `tests/test_input_bounds.py` quét toàn bộ endpoint theo OpenAPI nên endpoint nào quên giới hạn sẽ bị bắt.
+
+### Quy ước code (rút ra từ review)
+- **Một chỗ duy nhất** lấy resource + kiểm quyền + kiểm archive: `app/services/resource_access.py` (`ResourceAccess`). Service không tự viết lại `get -> 404 -> kiểm quyền`; luật project archive chỉ nằm ở `ensure_active`.
+- `create_task(user, project_id, payload)` nhận `project_id` riêng, không dựng lại schema trong service.
+- Schema PATCH dùng `not_nullable(...)` (`schemas/base.py`) cho field NOT NULL; mọi message validation nằm trong `core/constants.py` (có test chặn viết cứng).
+- **Tên label không phân biệt hoa thường** (`Bug` = `bug`), được bảo đảm bởi unique index `(project_id, lower(name))`. Lưu ý: `lower()` của SQLite chỉ xử lý chữ ASCII (`Đỏ` khác `đỏ`); PostgreSQL xử lý đủ Unicode.
+
+> **Nâng cấp từ bản cũ của migration `0003`:** migration này đã được sửa (đổi ràng buộc thường sang unique index không phân biệt hoa thường). Nếu DB của bạn đã chạy `0003` cũ, `alembic upgrade head` sẽ **không làm gì** và `alembic check` báo lệch. Cách sửa: với DB dev SQLite, xoá `taskhub.db` rồi chạy lại `alembic upgrade head` và `python -m scripts.seed`. Với DB cần giữ dữ liệu: chạy `alembic downgrade 0002` **trước khi** cập nhật code, rồi `alembic upgrade head` sau khi cập nhật.
+
 ## Lint & format (ruff)
 ```bash
 ruff format .          # định dạng (indent 4 space, quote kép, 100 cột)

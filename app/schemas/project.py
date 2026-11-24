@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.constants import (
     NAME_MIN_LENGTH,
@@ -8,7 +8,7 @@ from app.core.constants import (
     PROJECT_NAME_MAX_LENGTH,
 )
 from app.models.enums import ProjectStatus
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, not_nullable
 
 
 class ProjectCreate(BaseSchema):
@@ -24,12 +24,7 @@ class ProjectUpdate(BaseSchema):
     )
     description: str | None = Field(default=None, max_length=PROJECT_DESCRIPTION_MAX_LENGTH)
 
-    @field_validator("name")
-    @classmethod
-    def name_cannot_be_null(cls, v):  # noqa: ANN001, ANN206
-        if v is None:
-            raise ValueError("Không được để null")
-        return v
+    _no_null = not_nullable("name")
 
 
 class ProjectRead(BaseModel):

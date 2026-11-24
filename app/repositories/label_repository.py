@@ -22,8 +22,12 @@ class LabelRepository(BaseRepository[Label]):
         return await self.session.scalar(stmt) or 0
 
     async def get_by_name(self, project_id: int, name: str) -> Label | None:
-        """So khớp không phân biệt hoa thường: 'Bug' và 'bug' coi là trùng."""
+        """So khớp không phân biệt hoa thường: 'Bug' và 'bug' coi là trùng.
+
+        Dùng `func.lower` Ở CẢ HAI PHÍA (không dùng str.lower của Python) để khớp đúng biểu thức của
+        unique index `uq_labels_project_id_lower_name`: cùng một hàm thì kiểm tra trước ở service
+        và chốt chặn ở DB luôn đồng ý với nhau, và truy vấn này dùng được chính index đó."""
         stmt = select(Label).where(
-            Label.project_id == project_id, func.lower(Label.name) == name.lower()
+            Label.project_id == project_id, func.lower(Label.name) == func.lower(name)
         )
         return await self.session.scalar(stmt)

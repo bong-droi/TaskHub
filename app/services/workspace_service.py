@@ -5,7 +5,6 @@ from app.core.constants import (
     CANNOT_REMOVE_OWNER,
     MEMBER_NOT_FOUND,
     USER_NOT_FOUND,
-    WORKSPACE_NOT_FOUND,
 )
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
 from app.core.permissions import MANAGE_ROLES, READ_ROLES
@@ -17,7 +16,7 @@ from app.repositories.workspace_repository import (
     WorkspaceRepository,
 )
 from app.schemas.workspace import MemberInvite, MemberRead, WorkspaceCreate, WorkspaceUpdate
-from app.services.access import AccessControl
+from app.services.resource_access import ResourceAccess
 
 
 class WorkspaceService:
@@ -26,18 +25,12 @@ class WorkspaceService:
         workspaces: WorkspaceRepository,
         members: WorkspaceMemberRepository,
         users: UserRepository,
-        access: AccessControl,
+        resources: ResourceAccess,
     ) -> None:
         self.workspaces = workspaces
         self.members = members
         self.users = users
-        self.access = access
-
-    async def _get(self, workspace_id: int) -> Workspace:
-        ws = await self.workspaces.get(workspace_id)
-        if ws is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
-        return ws
+        self.resources = resources
 
     async def create(self, user: User, payload: WorkspaceCreate) -> Workspace:
         return await self.workspaces.create_with_owner(payload.name, user.id)
@@ -51,26 +44,21 @@ class WorkspaceService:
         )
 
     async def get(self, user: User, workspace_id: int) -> Workspace:
-        ws = await self._get(workspace_id)
-        await self.access.require(user, workspace_id, READ_ROLES, WORKSPACE_NOT_FOUND)
-        return ws
+        return await self.resources.workspace(user, workspace_id, READ_ROLES)
 
     async def update(self, user: User, workspace_id: int, payload: WorkspaceUpdate) -> Workspace:
-        ws = await self._get(workspace_id)
-        await self.access.require(user, workspace_id, MANAGE_ROLES, WORKSPACE_NOT_FOUND)
+        ws = await self.resources.workspace(user, workspace_id, MANAGE_ROLES)
         return await self.workspaces.update(ws, payload.model_dump(exclude_unset=True))
 
     async def delete(self, user: User, workspace_id: int) -> None:
-        ws = await self._get(workspace_id)
-        await self.access.require(user, workspace_id, MANAGE_ROLES, WORKSPACE_NOT_FOUND)
+        ws = await self.resources.workspace(user, workspace_id, MANAGE_ROLES)
         await self.workspaces.delete(ws)
 
     # ---- members ----
     async def invite_member(
         self, user: User, workspace_id: int, payload: MemberInvite
     ) -> MemberRead:
-        await self._get(workspace_id)
-        await self.access.require(user, workspace_id, MANAGE_ROLES, WORKSPACE_NOT_FOUND)
+        await self.resources.workspace(user, workspace_id, MANAGE_ROLES)
         target = await self.users.get_by_email(payload.email.lower())
         if target is None:
             raise NotFoundException(USER_NOT_FOUND)
@@ -90,8 +78,7 @@ class WorkspaceService:
         )
 
     async def list_members(self, user: User, workspace_id: int) -> list[MemberRead]:
-        await self._get(workspace_id)
-        await self.access.require(user, workspace_id, READ_ROLES, WORKSPACE_NOT_FOUND)
+        await self.resources.workspace(user, workspace_id, READ_ROLES)
         return [
             MemberRead(
                 user_id=m.user_id, email=m.user.email, full_name=m.user.full_name, role=m.role
@@ -100,8 +87,7 @@ class WorkspaceService:
         ]
 
     async def remove_member(self, user: User, workspace_id: int, target_id: int) -> None:
-        ws = await self._get(workspace_id)
-        await self.access.require(user, workspace_id, MANAGE_ROLES, WORKSPACE_NOT_FOUND)
+        ws = await self.resources.workspace(user, workspace_id, MANAGE_ROLES)
         if target_id == ws.owner_id:
             raise BadRequestException(CANNOT_REMOVE_OWNER)
         member = await self.members.get_member(workspace_id, target_id)

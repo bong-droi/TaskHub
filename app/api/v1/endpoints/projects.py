@@ -1,6 +1,7 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, PaginationDep, ProjectServiceDep
+from app.api.params import IdPath
 from app.schemas.common import Page
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 
@@ -14,7 +15,7 @@ router = APIRouter(tags=["projects"])
     summary="Tạo project (OWNER/EDITOR)",
 )
 async def create_project(
-    workspace_id: int, payload: ProjectCreate, user: CurrentUser, service: ProjectServiceDep
+    workspace_id: IdPath, payload: ProjectCreate, user: CurrentUser, service: ProjectServiceDep
 ):
     return await service.create(user, workspace_id, payload)
 
@@ -25,14 +26,14 @@ async def create_project(
     summary="Danh sách project trong workspace",
 )
 async def list_projects(
-    workspace_id: int, user: CurrentUser, service: ProjectServiceDep, page: PaginationDep
+    workspace_id: IdPath, user: CurrentUser, service: ProjectServiceDep, page: PaginationDep
 ):
     items, total = await service.list_in_workspace(user, workspace_id, page.skip, page.limit)
     return Page[ProjectRead](items=items, total=total, page=page.page, limit=page.limit)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectRead, summary="Chi tiết project")
-async def get_project(project_id: int, user: CurrentUser, service: ProjectServiceDep):
+async def get_project(project_id: IdPath, user: CurrentUser, service: ProjectServiceDep):
     return await service.get(user, project_id)
 
 
@@ -40,7 +41,7 @@ async def get_project(project_id: int, user: CurrentUser, service: ProjectServic
     "/projects/{project_id}", response_model=ProjectRead, summary="Sửa project (OWNER/EDITOR)"
 )
 async def update_project(
-    project_id: int, payload: ProjectUpdate, user: CurrentUser, service: ProjectServiceDep
+    project_id: IdPath, payload: ProjectUpdate, user: CurrentUser, service: ProjectServiceDep
 ):
     return await service.update(user, project_id, payload)
 
@@ -50,7 +51,7 @@ async def update_project(
     response_model=ProjectRead,
     summary="Archive project (OWNER/EDITOR)",
 )
-async def archive_project(project_id: int, user: CurrentUser, service: ProjectServiceDep):
+async def archive_project(project_id: IdPath, user: CurrentUser, service: ProjectServiceDep):
     return await service.archive(user, project_id)
 
 
@@ -59,5 +60,5 @@ async def archive_project(project_id: int, user: CurrentUser, service: ProjectSe
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Xoá project (OWNER)",
 )
-async def delete_project(project_id: int, user: CurrentUser, service: ProjectServiceDep):
+async def delete_project(project_id: IdPath, user: CurrentUser, service: ProjectServiceDep):
     await service.delete(user, project_id)

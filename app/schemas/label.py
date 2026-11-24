@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.constants import (
     DEFAULT_LABEL_COLOR,
@@ -6,9 +6,7 @@ from app.core.constants import (
     LABEL_NAME_MAX_LENGTH,
     NAME_MIN_LENGTH,
 )
-from app.schemas.base import BaseSchema
-
-ColorField = Field(pattern=LABEL_COLOR_PATTERN, examples=["#FF5733"])
+from app.schemas.base import BaseSchema, not_nullable
 
 
 class LabelCreate(BaseSchema):
@@ -22,12 +20,7 @@ class LabelUpdate(BaseSchema):
     )
     color: str | None = Field(default=None, pattern=LABEL_COLOR_PATTERN)
 
-    @field_validator("name", "color")
-    @classmethod
-    def required_fields_cannot_be_null(cls, v):  # noqa: ANN001, ANN206
-        if v is None:  # name/color là NOT NULL (xem review #1)
-            raise ValueError("Không được để null")
-        return v
+    _no_null = not_nullable("name", "color")
 
 
 class LabelRead(BaseModel):

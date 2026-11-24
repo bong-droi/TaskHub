@@ -8,7 +8,12 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import API_PREFIX
-from app.core.constants import DEFAULT_PAGE_LIMIT, INVALID_ACCESS_TOKEN, MAX_PAGE_LIMIT
+from app.core.constants import (
+    DEFAULT_PAGE_LIMIT,
+    INVALID_ACCESS_TOKEN,
+    MAX_PAGE_LIMIT,
+    MAX_PAGE_NUMBER,
+)
 from app.core.exceptions import UnauthorizedException
 from app.core.security import ACCESS, decode_token
 from app.db.session import get_db
@@ -27,6 +32,7 @@ from app.services.auth_service import AuthService
 from app.services.comment_service import CommentService
 from app.services.label_service import LabelService
 from app.services.project_service import ProjectService
+from app.services.resource_access import ResourceAccess
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
 from app.services.workspace_service import WorkspaceService
@@ -41,38 +47,41 @@ def get_access_control(db: DbSession) -> AccessControl:
     return AccessControl(WorkspaceMemberRepository(db))
 
 
-def get_task_service(db: DbSession) -> TaskService:
-    # Các repo dùng chung 1 session của request
-    return TaskService(
-        TaskRepository(db),
-        ProjectRepository(db),
-        UserRepository(db),
+def get_resources(db: DbSession) -> ResourceAccess:
+    """Một đối tượng dùng chung cho mọi service: lấy resource + kiểm quyền + kiểm archive."""
+    return ResourceAccess(
         get_access_control(db),
-        LabelRepository(db),
-    )
-
-
-def get_label_service(db: DbSession) -> LabelService:
-    return LabelService(LabelRepository(db), ProjectRepository(db), get_access_control(db))
-
-
-def get_comment_service(db: DbSession) -> CommentService:
-    return CommentService(
-        CommentRepository(db), TaskRepository(db), ProjectRepository(db), get_access_control(db)
-    )
-
-
-def get_workspace_service(db: DbSession) -> WorkspaceService:
-    return WorkspaceService(
         WorkspaceRepository(db),
-        WorkspaceMemberRepository(db),
-        UserRepository(db),
-        get_access_control(db),
+        ProjectRepository(db),
+        TaskRepository(db),
+        LabelRepository(db),
+        CommentRepository(db),
     )
 
 
-def get_project_service(db: DbSession) -> ProjectService:
-    return ProjectService(ProjectRepository(db), WorkspaceRepository(db), get_access_control(db))
+ResourcesDep = Annotated[ResourceAccess, Depends(get_resources)]
+
+
+def get_task_service(db: DbSession, resources: ResourcesDep) -> TaskService:
+    return TaskService(TaskRepository(db), UserRepository(db), resources)
+
+
+def get_label_service(db: DbSession, resources: ResourcesDep) -> LabelService:
+    return LabelService(LabelRepository(db), resources)
+
+
+def get_comment_service(db: DbSession, resources: ResourcesDep) -> CommentService:
+    return CommentService(CommentRepository(db), resources)
+
+
+def get_workspace_service(db: DbSession, resources: ResourcesDep) -> WorkspaceService:
+    return WorkspaceService(
+        WorkspaceRepository(db), WorkspaceMemberRepository(db), UserRepository(db), resources
+    )
+
+
+def get_project_service(db: DbSession, resources: ResourcesDep) -> ProjectService:
+    return ProjectService(ProjectRepository(db), resources)
 
 
 def get_auth_service(db: DbSession) -> AuthService:
@@ -96,11 +105,12 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Db
 
 
 class Pagination:
-    """Phân trang kiểu page + limit (theo đặc tả). page bắt đầu từ 1."""
+    """Phân trang kiểu page + limit (theo đặc tả). page bắt đầu từ 1, tối đa MAX_PAGE_NUMBER để
+    offset không tràn số nguyên của DB."""
 
     def __init__(
         self,
-        page: Annotated[int, Query(ge=1)] = 1,
+        page: Annotated[int, Query(ge=1, le=MAX_PAGE_NUMBER)] = 1,
         limit: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
     ) -> None:
         self.page = page

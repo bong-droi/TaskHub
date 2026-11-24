@@ -1,6 +1,7 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import CommentServiceDep, CurrentUser, PaginationDep
+from app.api.params import IdPath
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.common import Page
 
@@ -14,7 +15,7 @@ router = APIRouter(tags=["comments"])
     summary="Thêm comment (OWNER/EDITOR)",
 )
 async def add_comment(
-    task_id: int, payload: CommentCreate, user: CurrentUser, service: CommentServiceDep
+    task_id: IdPath, payload: CommentCreate, user: CurrentUser, service: CommentServiceDep
 ):
     return await service.add(user, task_id, payload)
 
@@ -25,7 +26,7 @@ async def add_comment(
     summary="Danh sách comment của task (cũ nhất trước)",
 )
 async def list_comments(
-    task_id: int, user: CurrentUser, service: CommentServiceDep, page: PaginationDep
+    task_id: IdPath, user: CurrentUser, service: CommentServiceDep, page: PaginationDep
 ):
     items, total = await service.list_for_task(user, task_id, page.skip, page.limit)
     return Page[CommentRead](items=items, total=total, page=page.page, limit=page.limit)
@@ -36,5 +37,5 @@ async def list_comments(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Xoá comment (tác giả hoặc OWNER)",
 )
-async def delete_comment(comment_id: int, user: CurrentUser, service: CommentServiceDep):
+async def delete_comment(comment_id: IdPath, user: CurrentUser, service: CommentServiceDep):
     await service.delete(user, comment_id)

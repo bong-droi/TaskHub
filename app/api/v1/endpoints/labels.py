@@ -1,6 +1,7 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, LabelServiceDep, PaginationDep
+from app.api.params import IdPath
 from app.schemas.common import Page
 from app.schemas.label import LabelCreate, LabelRead, LabelUpdate
 
@@ -14,7 +15,7 @@ router = APIRouter(tags=["labels"])
     summary="Tạo label trong project (OWNER/EDITOR)",
 )
 async def create_label(
-    project_id: int, payload: LabelCreate, user: CurrentUser, service: LabelServiceDep
+    project_id: IdPath, payload: LabelCreate, user: CurrentUser, service: LabelServiceDep
 ):
     return await service.create(user, project_id, payload)
 
@@ -25,7 +26,7 @@ async def create_label(
     summary="Danh sách label của project",
 )
 async def list_labels(
-    project_id: int, user: CurrentUser, service: LabelServiceDep, page: PaginationDep
+    project_id: IdPath, user: CurrentUser, service: LabelServiceDep, page: PaginationDep
 ):
     items, total = await service.list_in_project(user, project_id, page.skip, page.limit)
     return Page[LabelRead](items=items, total=total, page=page.page, limit=page.limit)
@@ -33,7 +34,7 @@ async def list_labels(
 
 @router.patch("/labels/{label_id}", response_model=LabelRead, summary="Sửa label (OWNER/EDITOR)")
 async def update_label(
-    label_id: int, payload: LabelUpdate, user: CurrentUser, service: LabelServiceDep
+    label_id: IdPath, payload: LabelUpdate, user: CurrentUser, service: LabelServiceDep
 ):
     return await service.update(user, label_id, payload)
 
@@ -43,5 +44,5 @@ async def update_label(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Xoá label, tự gỡ khỏi các task (OWNER/EDITOR)",
 )
-async def delete_label(label_id: int, user: CurrentUser, service: LabelServiceDep):
+async def delete_label(label_id: IdPath, user: CurrentUser, service: LabelServiceDep):
     await service.delete(user, label_id)

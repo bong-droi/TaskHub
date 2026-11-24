@@ -1,9 +1,14 @@
+from unittest.mock import AsyncMock
+
+import pytest
+
 from app.core.constants import (
     LABEL_NAME_EXISTS,
     LABEL_NOT_FOUND,
     LABEL_NOT_IN_PROJECT,
     PROJECT_ARCHIVED,
 )
+from app.repositories.label_repository import LabelRepository
 
 PRJ = "/api/v1/projects"
 TASKS = "/api/v1/tasks"
@@ -180,3 +185,105 @@ async def test_archived_project_blocks_label_changes(team, anon):
     attach = await anon.post(f"{TASKS}/{task['id']}/labels/{label['id']}", headers=h)
     assert attach.status_code == 409
     assert (await anon.get(_labels_url(team), headers=team.h["carol"])).status_code == 200
+
+
+# ------------------------------------------------- tên không phân biệt hoa thường (review PR #5)
+async def test_database_itself_rejects_names_that_differ_only_by_case(team, anon, session_factory):
+    """Chốt chặn cuối là unique index (project_id, lower(name)), không chỉ kiểm tra ở service."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models import Label
+
+    pid = team.project["id"]
+    other = await _other_project(anon, team)
+    async with session_factory() as db:
+        db.add(Label(project_id=pid, name="Bug"))
+        db.add(Label(project_id=other["id"], name="bug"))  # project khác: hợp lệ
+        await db.commit()
+        db.add(Label(project_id=pid, name="bUG"))  # cùng project, khác hoa thường: bị chặn
+        with pytest.raises(IntegrityError):
+            await db.commit()
+
+
+async def test_concurrent_create_with_different_case_returns_409_not_500(team, anon, monkeypatch):
+    """Hai request "Bug"/"bug" cùng lúc: cả hai qua bước kiểm tra ở service. Mô phỏng bằng cách
+    làm bước kiểm tra luôn báo "chưa có"; unique index của DB phải chặn bản sau."""
+    await _label(anon, team, "Bug")
+    monkeypatch.setattr(LabelRepository, "get_by_name", AsyncMock(return_value=None))
+    r = await anon.post(_labels_url(team), json={"name": "bug"}, headers=team.h["alice"])
+    assert r.status_code == 409 and r.json() == {"detail": LABEL_NAME_EXISTS}
+    monkeypatch.undo()
+    page = (await anon.get(_labels_url(team), headers=team.h["alice"])).json()
+    assert [lb["name"] for lb in page["items"]] == ["Bug"]  # không có bản trùng
+
+
+async def test_concurrent_rename_to_a_name_that_differs_by_case_returns_409(
+    team, anon, monkeypatch
+):
+    first, second = await _label(anon, team, "alpha"), await _label(anon, team, "beta")
+    monkeypatch.setattr(LabelRepository, "get_by_name", AsyncMock(return_value=None))
+    r = await anon.patch(
+        f"{LABELS}/{second['id']}", json={"name": "ALPHA"}, headers=team.h["alice"]
+    )
+    assert r.status_code == 409 and r.json() == {"detail": LABEL_NAME_EXISTS}
+    monkeypatch.undo()
+    names = {
+        lb["id"]: lb["name"]
+        for lb in (await anon.get(_labels_url(team), headers=team.h["alice"])).json()["items"]
+    }
+    assert names == {first["id"]: "alpha", second["id"]: "beta"}  # rollback: tên cũ còn nguyên
+    ok = await anon.patch(
+        f"{LABELS}/{second['id']}", json={"name": "gamma"}, headers=team.h["alice"]
+    )
+    assert ok.status_code == 200  # session vẫn dùng được sau rollback
+
+
+async def test_service_and_database_always_agree_on_what_counts_as_a_duplicate(
+    team, anon, session_factory
+):
+    """Service và index dùng CÙNG biểu thức lower(): với bất kỳ cặp tên nào, kết luận "trùng" của
+    hai bên phải giống nhau. Bao gồm chữ tiếng Việt, nơi lower() của SQLite chỉ xử lý ASCII."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models import Label
+
+    pairs = [("Bug", "bug"), ("BUG", "Bug"), ("done", "DONE"), ("Đỏ", "đỏ"), ("Ăn", "ăn"),
+             ("đỏ", "ĐỎ"), ("âm", "ÂM"), ("Mới", "Mới"), ("a", "b")]  # fmt: skip
+    for first, second in pairs:
+        service_project = await _other_project(anon, team)
+        await anon.post(
+            f"{PRJ}/{service_project['id']}/labels", json={"name": first}, headers=team.h["alice"]
+        )
+        r = await anon.post(
+            f"{PRJ}/{service_project['id']}/labels",
+            json={"name": second},
+            headers=team.h["alice"],
+        )
+        service_says_duplicate = r.status_code == 409
+        assert r.status_code in (201, 409), (first, second, r.text)
+
+        db_project = await _other_project(anon, team)
+        async with session_factory() as db:
+            db.add(Label(project_id=db_project["id"], name=first))
+            await db.commit()
+            db.add(Label(project_id=db_project["id"], name=second))
+            try:
+                await db.commit()
+                db_says_duplicate = False
+            except IntegrityError:
+                db_says_duplicate = True
+        assert service_says_duplicate == db_says_duplicate, (first, second)
+
+
+async def test_get_by_name_ignores_case(team, session_factory):
+    from app.models import Label
+    from app.repositories.label_repository import LabelRepository as Repo
+
+    async with session_factory() as db:
+        db.add(Label(project_id=team.project["id"], name="bug"))
+        await db.commit()
+        repo = Repo(db)
+        for query in ("bug", "BUG", "Bug"):
+            found = await repo.get_by_name(team.project["id"], query)
+            assert found is not None and found.name == "bug"
+        assert await repo.get_by_name(team.project["id"], "bugs") is None

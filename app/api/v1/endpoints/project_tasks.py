@@ -3,6 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import CurrentUser, PaginationDep, TaskServiceDep
+from app.api.params import IdPath
+from app.core.constants import MAX_DB_ID
 from app.models.enums import TaskPriority, TaskStatus
 from app.schemas.common import Page
 from app.schemas.task import TaskCreateInProject, TaskRead
@@ -18,9 +20,11 @@ class TaskFilters:
         status: Annotated[TaskStatus | None, Query(description="Lọc theo trạng thái")] = None,
         priority: Annotated[TaskPriority | None, Query(description="Lọc theo độ ưu tiên")] = None,
         assignee_id: Annotated[
-            int | None, Query(gt=0, description="Lọc theo người được gán")
+            int | None, Query(ge=1, le=MAX_DB_ID, description="Lọc theo người được gán")
         ] = None,
-        label_id: Annotated[int | None, Query(gt=0, description="Lọc theo label")] = None,
+        label_id: Annotated[
+            int | None, Query(ge=1, le=MAX_DB_ID, description="Lọc theo label")
+        ] = None,
     ) -> None:
         self.status = status
         self.priority = priority
@@ -34,23 +38,22 @@ class TaskFilters:
     summary="Task trong project (lọc status/priority/assignee/label + phân trang)",
 )
 async def list_project_tasks(
-    project_id: int,
+    project_id: IdPath,
     user: CurrentUser,
     service: TaskServiceDep,
     page: PaginationDep,
     filters: Annotated[TaskFilters, Depends()],
 ):
-    items, total = await service.list_in_project(
+    return await service.list_in_project(
         user,
         project_id,
-        page.skip,
+        page.page,
         page.limit,
         status=filters.status,
         priority=filters.priority,
         assignee_id=filters.assignee_id,
         label_id=filters.label_id,
     )
-    return Page[TaskRead](items=items, total=total, page=page.page, limit=page.limit)
 
 
 @router.post(
@@ -60,6 +63,6 @@ async def list_project_tasks(
     summary="Tạo task trong project (OWNER/EDITOR)",
 )
 async def create_project_task(
-    project_id: int, payload: TaskCreateInProject, user: CurrentUser, service: TaskServiceDep
+    project_id: IdPath, payload: TaskCreateInProject, user: CurrentUser, service: TaskServiceDep
 ):
-    return await service.create_in_project(user, project_id, payload)
+    return await service.create_task(user, project_id, payload)
