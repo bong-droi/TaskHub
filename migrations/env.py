@@ -9,19 +9,19 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import app.models  # noqa: F401  (đăng ký toàn bộ bảng vào metadata)
-from app.core.config import DATABASE_URL
+from app.core.config import settings
 from app.db.base import Base
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=DATABASE_URL,
+        url=settings.DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         render_as_batch=True,

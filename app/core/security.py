@@ -6,20 +6,14 @@ from datetime import UTC, datetime, timedelta
 import bcrypt
 import jwt
 
-from app.core.config import (
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    ALGORITHM,
-    BCRYPT_ROUNDS,
-    REFRESH_TOKEN_EXPIRE_DAYS,
-    SECRET_KEY,
-)
+from app.core.config import ALGORITHM, settings
 
 ACCESS = "access"
 REFRESH = "refresh"
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=settings.BCRYPT_ROUNDS)).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
@@ -38,24 +32,28 @@ def _encode(sub: str, token_type: str, expires_delta: timedelta) -> tuple[str, s
     jti = uuid.uuid4().hex
     exp = now + expires_delta
     payload = {"sub": sub, "type": token_type, "jti": jti, "iat": now, "exp": exp}
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM), jti, exp
+    return (
+        jwt.encode(payload, settings.SECRET_KEY.get_secret_value(), algorithm=ALGORITHM),
+        jti,
+        exp,
+    )
 
 
 def create_access_token(sub: str, expires_delta: timedelta | None = None) -> str:
-    delta = expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    delta = expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return _encode(sub, ACCESS, delta)[0]
 
 
 def create_refresh_token(sub: str) -> tuple[str, str, datetime]:
     """Trả về (token, jti, hạn dùng). jti được lưu DB để có thể thu hồi."""
-    return _encode(sub, REFRESH, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
+    return _encode(sub, REFRESH, timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
 
 
 def decode_token(token: str, expected_type: str) -> dict:
     """Raise jwt.InvalidTokenError nếu token sai chữ ký, hết hạn hoặc sai loại."""
     payload = jwt.decode(
         token,
-        SECRET_KEY,
+        settings.SECRET_KEY.get_secret_value(),
         algorithms=[ALGORITHM],  # luôn chỉ định algorithms
         options={"require": ["exp", "sub", "jti"]},
     )

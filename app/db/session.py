@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import DATABASE_URL
+from app.core.config import settings
 
 
 def enable_sqlite_fk(engine: AsyncEngine) -> None:
@@ -23,7 +23,7 @@ def enable_sqlite_fk(engine: AsyncEngine) -> None:
         cursor.close()
 
 
-engine = create_async_engine(DATABASE_URL)
+engine = create_async_engine(settings.DATABASE_URL)
 enable_sqlite_fk(engine)
 
 # expire_on_commit=False: object vẫn đọc được sau commit (tránh lazy-load ngoài ý muốn trong async)

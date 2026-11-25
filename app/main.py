@@ -4,19 +4,21 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1.router import api_router
-from app.core.config import API_PREFIX, APP_NAME, APP_VERSION
+from app.core.cache import close_cache_backend
+from app.core.config import API_PREFIX, APP_NAME, APP_VERSION, settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middleware import RequestContextMiddleware
 from app.db.session import engine
 
 logger = logging.getLogger("taskhub")
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=settings.LOG_LEVEL)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("%s đang khởi động...", APP_NAME)
+    logger.info("%s đang khởi động (APP_ENV=%s)...", APP_NAME, settings.APP_ENV)
     yield
+    await close_cache_backend()  # đóng kết nối Redis
     await engine.dispose()  # đóng connection pool khi tắt app
     logger.info("%s đã dừng.", APP_NAME)
 

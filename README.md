@@ -9,12 +9,13 @@ Sample app xây dần theo từng ngày. Kiến trúc: **Router → Service → 
 | 3 | Authentication & Security: bcrypt, JWT access/refresh, profile | `day-3` |
 | 4 | Authorization & RBAC, Workspace, Project | `day-4` |
 | 5 | Task nâng cao (lọc, phân trang), Label, Comment, Middleware | `day-5` |
+| 6 | Cấu hình pydantic-settings, Redis cache, Background task email | `day-6` |
 
 ## Chạy nhanh (SQLite)
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # tuỳ chọn, mặc định dùng SQLite
+cp .env.example .env            # tuỳ chọn; mặc định chạy được ngay với SQLite
 alembic upgrade head            # tạo bảng
 python -m scripts.seed          # dữ liệu mẫu (project_id=1)
 uvicorn app.main:app --reload
@@ -71,6 +72,10 @@ app/
 ├── repositories/base.py     # BaseRepository[T]: get/list/count/create/update/delete
 ├── core/permissions.py      # ma trận quyền theo role
 ├── core/middleware.py       # request id, process time, access log
+├── core/cache.py            # Redis / NullCache
+├── core/email.py            # console / SMTP
+├── services/task_cache.py   # cache danh sách task (version counter)
+├── services/notifier.py     # email nền khi giao task
 ├── services/                # business logic (async), access.py = kiểm tra quyền
 ├── schemas/                 # Pydantic v2 + Page[T]
 └── api/                     # deps.py (DI), v1/endpoints
@@ -158,6 +163,46 @@ Khi thêm endpoint mới, **dùng `IdPath` cho id trên URL và `DbId` cho id tr
 - **Tên label không phân biệt hoa thường** (`Bug` = `bug`), được bảo đảm bởi unique index `(project_id, lower(name))`. Lưu ý: `lower()` của SQLite chỉ xử lý chữ ASCII (`Đỏ` khác `đỏ`); PostgreSQL xử lý đủ Unicode.
 
 > **Nâng cấp từ bản cũ của migration `0003`:** migration này đã được sửa (đổi ràng buộc thường sang unique index không phân biệt hoa thường). Nếu DB của bạn đã chạy `0003` cũ, `alembic upgrade head` sẽ **không làm gì** và `alembic check` báo lệch. Cách sửa: với DB dev SQLite, xoá `taskhub.db` rồi chạy lại `alembic upgrade head` và `python -m scripts.seed`. Với DB cần giữ dữ liệu: chạy `alembic downgrade 0002` **trước khi** cập nhật code, rồi `alembic upgrade head` sau khi cập nhật.
+
+## Cấu hình, Redis cache, Email nền (Ngày 6)
+
+### Cấu hình (`pydantic-settings`)
+Mọi cấu hình nằm ở `app/core/config.py` (class `Settings`), đọc từ biến môi trường và file `.env`.
+Danh sách đầy đủ và giải thích từng biến: xem `.env.example`.
+
+- **Fail-fast:** cấu hình sai thì app **không khởi động được** và báo rõ biến nào sai. Ví dụ:
+  `DATABASE_URL` dùng driver đồng bộ, `SECRET_KEY` ngắn hơn 32 ký tự, `REDIS_URL` sai dạng, `EMAIL_BACKEND=smtp` mà thiếu `SMTP_HOST`.
+- **Nhiều môi trường:** đặt `APP_ENV` (development, test, production) **bằng biến môi trường thật**. Thứ tự ưu tiên: biến môi trường > `.env.<APP_ENV>` > `.env` > mặc định.
+  ```powershell
+  $env:APP_ENV = "production"      # PowerShell (Linux/Mac: export APP_ENV=production)
+  ```
+- **Production** bắt buộc đổi `SECRET_KEY` (không được dùng khoá mặc định) và `BCRYPT_ROUNDS >= 10`.
+- `SECRET_KEY` và `SMTP_PASSWORD` là `SecretStr`: không bị lộ khi `print`/log. File `.env.*` (trừ `.env.example`) đã được `.gitignore`.
+
+### Redis cache cho `GET /projects/{id}/tasks`
+Bật bằng cách đặt `REDIS_URL` (để trống = tắt cache, app vẫn chạy bình thường):
+```bash
+docker run -d --name taskhub-redis -p 6379:6379 redis:7
+# trong .env:  REDIS_URL=redis://localhost:6379/0
+```
+Response có header **`X-Cache: HIT | MISS | BYPASS`** (BYPASS = cache tắt) để quan sát.
+
+- **Key** dạng `tasks:p{project}:v{version}:{bộ lọc + trang}`, ví dụ `tasks:p1:v3:status=*&priority=HIGH&assignee=*&label=*&page=1&limit=20`. Mỗi tổ hợp lọc/trang có một key riêng, hết hạn sau `CACHE_TTL_SECONDS` (mặc định 60s).
+- **Vô hiệu hoá bằng version counter:** mỗi project có số phiên bản `tasks:ver:{project}`. Tạo/sửa/xoá task, gắn/gỡ label, đổi tên/xoá label, tạo/xoá project đều **tăng version** (`INCR`, O(1)); key cũ tự mồ côi rồi hết hạn. Không dùng `KEYS`/`SCAN`.
+- **Quyền được kiểm tra trước khi đọc cache**, nên dữ liệu trong cache dùng chung an toàn; bị gỡ khỏi workspace là mất quyền xem ngay.
+- **Redis lỗi/chết không làm hỏng API:** ghi cảnh báo rồi chạy thẳng bằng DB (timeout kết nối 1 giây).
+
+### Email khi được giao task
+Giao task cho **người khác** (lúc tạo, hoặc `PATCH assignee_id` sang người mới) thì gửi email cho người được giao, chạy nền bằng `BackgroundTasks` (response trả về trước). Không gửi khi tự giao cho mình, khi giao lại đúng người cũ, hoặc khi request thất bại. Lỗi gửi email chỉ ghi log, không ảnh hưởng response.
+
+- `EMAIL_BACKEND=console` (mặc định): chỉ ghi log `[EMAIL console] to=... subject=...`.
+- `EMAIL_BACKEND=smtp`: gửi thật qua `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` (chạy trong thread, không chặn event loop).
+
+### Chạy test với Redis thật (tuỳ chọn)
+Test thường dùng `fakeredis` (không cần cài gì). Muốn kiểm tra với Redis thật:
+```bash
+TEST_REDIS_URL=redis://localhost:6379/15 pytest tests/test_redis_integration.py   # PowerShell: $env:TEST_REDIS_URL = "..."
+```
 
 ## Lint & format (ruff)
 ```bash

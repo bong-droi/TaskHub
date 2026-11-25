@@ -3,17 +3,19 @@
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, Query
+from fastapi import BackgroundTasks, Depends, Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import API_PREFIX
+from app.core.cache import CacheBackend, get_cache_backend
+from app.core.config import API_PREFIX, settings
 from app.core.constants import (
     DEFAULT_PAGE_LIMIT,
     INVALID_ACCESS_TOKEN,
     MAX_PAGE_LIMIT,
     MAX_PAGE_NUMBER,
 )
+from app.core.email import EmailBackend, get_email_backend
 from app.core.exceptions import UnauthorizedException
 from app.core.security import ACCESS, decode_token
 from app.db.session import get_db
@@ -31,8 +33,10 @@ from app.services.access import AccessControl
 from app.services.auth_service import AuthService
 from app.services.comment_service import CommentService
 from app.services.label_service import LabelService
+from app.services.notifier import Notifier
 from app.services.project_service import ProjectService
 from app.services.resource_access import ResourceAccess
+from app.services.task_cache import TaskListCache
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
 from app.services.workspace_service import WorkspaceService
@@ -45,6 +49,23 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{API_PREFIX}/auth/login")
 
 def get_access_control(db: DbSession) -> AccessControl:
     return AccessControl(WorkspaceMemberRepository(db))
+
+
+def get_task_list_cache(
+    backend: Annotated[CacheBackend, Depends(get_cache_backend)],
+) -> TaskListCache:
+    return TaskListCache(backend, settings.CACHE_TTL_SECONDS)
+
+
+def get_notifier(
+    background: BackgroundTasks,  # cùng một đối tượng với BackgroundTasks của endpoint
+    backend: Annotated[EmailBackend, Depends(get_email_backend)],
+) -> Notifier:
+    return Notifier(background, backend)
+
+
+TaskListCacheDep = Annotated[TaskListCache, Depends(get_task_list_cache)]
+NotifierDep = Annotated[Notifier, Depends(get_notifier)]
 
 
 def get_resources(db: DbSession) -> ResourceAccess:
@@ -62,12 +83,16 @@ def get_resources(db: DbSession) -> ResourceAccess:
 ResourcesDep = Annotated[ResourceAccess, Depends(get_resources)]
 
 
-def get_task_service(db: DbSession, resources: ResourcesDep) -> TaskService:
-    return TaskService(TaskRepository(db), UserRepository(db), resources)
+def get_task_service(
+    db: DbSession, resources: ResourcesDep, cache: TaskListCacheDep, notifier: NotifierDep
+) -> TaskService:
+    return TaskService(TaskRepository(db), UserRepository(db), resources, cache, notifier)
 
 
-def get_label_service(db: DbSession, resources: ResourcesDep) -> LabelService:
-    return LabelService(LabelRepository(db), resources)
+def get_label_service(
+    db: DbSession, resources: ResourcesDep, cache: TaskListCacheDep
+) -> LabelService:
+    return LabelService(LabelRepository(db), resources, cache)
 
 
 def get_comment_service(db: DbSession, resources: ResourcesDep) -> CommentService:
@@ -80,8 +105,10 @@ def get_workspace_service(db: DbSession, resources: ResourcesDep) -> WorkspaceSe
     )
 
 
-def get_project_service(db: DbSession, resources: ResourcesDep) -> ProjectService:
-    return ProjectService(ProjectRepository(db), resources)
+def get_project_service(
+    db: DbSession, resources: ResourcesDep, cache: TaskListCacheDep
+) -> ProjectService:
+    return ProjectService(ProjectRepository(db), resources, cache)
 
 
 def get_auth_service(db: DbSession) -> AuthService:

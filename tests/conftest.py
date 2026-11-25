@@ -1,16 +1,34 @@
 from types import SimpleNamespace
 
 import pytest
+from fakeredis import FakeAsyncRedis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.core.cache import NullCache, RedisCache, get_cache_backend
+from app.core.config import settings
+from app.core.email import Email, get_email_backend
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import enable_sqlite_fk, get_db
 from app.main import app
 from app.models import Project, User, Workspace, WorkspaceMember
 from app.models.enums import UserRole, WorkspaceRole
+
+
+class RecordingEmailBackend:
+    """Thay cho SMTP trong test: ghi lại email "đã gửi"; `fail=True` để mô phỏng SMTP lỗi."""
+
+    def __init__(self) -> None:
+        self.sent: list[Email] = []
+        self.fail = False
+
+    async def send(self, message: Email) -> None:
+        if self.fail:
+            raise ConnectionError("SMTP down")
+        self.sent.append(message)
+
 
 EMAIL = "t@t.dev"
 PASSWORD = "secret123"
@@ -19,7 +37,7 @@ PASSWORD = "secret123"
 @pytest.fixture(autouse=True)
 def fast_bcrypt(monkeypatch):
     """Giảm cost bcrypt trong test cho nhanh (production vẫn dùng 12)."""
-    monkeypatch.setattr("app.core.security.BCRYPT_ROUNDS", 4)
+    monkeypatch.setattr(settings, "BCRYPT_ROUNDS", 4)
 
 
 @pytest.fixture
@@ -52,14 +70,21 @@ async def seeded(session_factory):
 
 
 @pytest.fixture
-async def anon(session_factory, seeded):
-    """Client CHƯA đăng nhập."""
+def outbox():
+    return RecordingEmailBackend()
+
+
+@pytest.fixture
+async def anon(session_factory, seeded, outbox):
+    """Client CHƯA đăng nhập. Test không bao giờ chạm Redis/SMTP thật dù máy dev có .env."""
 
     async def override_get_db():
         async with session_factory() as session:
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_cache_backend] = NullCache  # cache tắt (test cache tự bật lại)
+    app.dependency_overrides[get_email_backend] = lambda: outbox
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
@@ -128,3 +153,14 @@ async def team(anon, make_user, auth):
         await anon.post(f"{WS}/{ws['id']}/projects", json={"name": "P"}, headers=h["alice"])
     ).json()
     return SimpleNamespace(ids=ids, h=h, ws=ws, project=project)
+
+
+@pytest.fixture
+async def redis_cache(anon):
+    """Bật cache bằng Redis giả (fakeredis, đúng giao thức Redis) cho test cache."""
+    client = FakeAsyncRedis(decode_responses=True)
+    backend = RedisCache(client)
+    app.dependency_overrides[get_cache_backend] = lambda: backend
+    yield backend
+    await client.flushall()
+    await backend.close()
