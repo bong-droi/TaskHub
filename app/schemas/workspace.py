@@ -8,7 +8,7 @@ from app.core.constants import (
     WORKSPACE_NAME_MAX_LENGTH,
 )
 from app.models.enums import WorkspaceRole
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, not_nullable
 
 
 class WorkspaceCreate(BaseSchema):
@@ -20,12 +20,7 @@ class WorkspaceUpdate(BaseSchema):
         default=None, min_length=NAME_MIN_LENGTH, max_length=WORKSPACE_NAME_MAX_LENGTH
     )
 
-    @field_validator("name")
-    @classmethod
-    def name_cannot_be_null(cls, v):  # noqa: ANN001, ANN206
-        if v is None:
-            raise ValueError("Không được để null")  # name là NOT NULL (xem review #1)
-        return v
+    _no_null = not_nullable("name")
 
 
 class WorkspaceRead(BaseModel):

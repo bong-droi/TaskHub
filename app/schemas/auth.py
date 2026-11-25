@@ -2,13 +2,18 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints
 
-from app.core.constants import BCRYPT_MAX_BYTES, FULL_NAME_MAX_LENGTH, PASSWORD_MIN_LENGTH
+from app.core.constants import (
+    BCRYPT_MAX_BYTES,
+    FULL_NAME_MAX_LENGTH,
+    PASSWORD_MIN_LENGTH,
+    PASSWORD_TOO_LONG,
+)
 
 
 def _bcrypt_limit(v: str) -> str:
     # Đếm theo byte, vì ký tự tiếng Việt chiếm nhiều hơn 1 byte
     if len(v.encode()) > BCRYPT_MAX_BYTES:
-        raise ValueError(f"Mật khẩu tối đa {BCRYPT_MAX_BYTES} byte")
+        raise ValueError(PASSWORD_TOO_LONG.format(max_bytes=BCRYPT_MAX_BYTES))
     return v
 
 

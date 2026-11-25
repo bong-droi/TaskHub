@@ -1,4 +1,4 @@
-"""Unit test tầng service: chỉ dùng repository/access được inject, raise exception nghiệp vụ."""
+"""Unit test tầng service: chỉ dùng các thành phần được inject, raise exception nghiệp vụ."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,8 +6,8 @@ import pytest
 
 from app.core.constants import PROJECT_NOT_FOUND, TASK_NOT_FOUND
 from app.core.exceptions import NotFoundException
-from app.models.enums import ProjectStatus
-from app.schemas.task import TaskCreate
+from app.core.permissions import WRITE_ROLES
+from app.schemas.task import TaskCreate, TaskCreateInProject
 from app.services.task_service import TaskService
 
 USER = MagicMock(id=7)
@@ -15,31 +15,52 @@ USER = MagicMock(id=7)
 
 @pytest.fixture
 def parts():
-    tasks, projects, users, access = AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock()
-    return TaskService(tasks, projects, users, access), tasks, projects, access
+    tasks, users = AsyncMock(), AsyncMock()
+    resources = MagicMock()  # ensure_active là hàm thường; các loader là async
+    for name in ("project", "task", "label", "is_member"):
+        setattr(resources, name, AsyncMock())
+    return TaskService(tasks, users, resources), tasks, resources
 
 
 async def test_create_task_goes_through_injected_dependencies(parts):
-    svc, tasks, projects, access = parts
-    projects.get.return_value = MagicMock(workspace_id=5, status=ProjectStatus.ACTIVE)
+    svc, tasks, resources = parts
+    project = MagicMock(id=1, workspace_id=5)
+    resources.project.return_value = project
     tasks.create.return_value = "created"
-    assert await svc.create_task(TaskCreate(title="x", project_id=1), USER) == "created"
-    projects.get.assert_awaited_once_with(1)
-    access.require.assert_awaited_once()  # phải kiểm tra quyền trước khi tạo
-    assert tasks.create.await_args.args[0]["created_by"] == 7
+    assert await svc.create_task(USER, 1, TaskCreateInProject(title="x")) == "created"
+    resources.project.assert_awaited_once_with(USER, 1, WRITE_ROLES)  # kiểm quyền trước khi tạo
+    resources.ensure_active.assert_called_once_with(project)
+    data = tasks.create.await_args.args[0]
+    assert data["created_by"] == 7 and data["project_id"] == 1
+
+
+async def test_project_id_argument_wins_over_the_body(parts):
+    """Endpoint cũ (POST /tasks) gửi project_id trong body: tham số project_id của hàm là nguồn
+    duy nhất, body không được ghi đè."""
+    svc, tasks, resources = parts
+    resources.project.return_value = MagicMock(id=3, workspace_id=5)
+    await svc.create_task(USER, 3, TaskCreate(title="x", project_id=99))
+    assert tasks.create.await_args.args[0]["project_id"] == 3
+    resources.project.assert_awaited_once_with(USER, 3, WRITE_ROLES)
+
+
+@pytest.mark.parametrize("project_id", [0, -3, 2**31, 10**20])
+async def test_create_task_with_unknown_project_is_not_found_never_validation_error(
+    parts, project_id
+):
+    """Review: trước đây service dựng lại TaskCreate(project_id=...) nên project_id=0 ném
+    ValidationError ngay trong service (500). Giờ chỉ còn NotFoundException."""
+    svc, tasks, resources = parts
+    resources.project.side_effect = NotFoundException(PROJECT_NOT_FOUND)
+    with pytest.raises(NotFoundException) as exc:
+        await svc.create_task(USER, project_id, TaskCreateInProject(title="x"))
+    assert exc.value.message == PROJECT_NOT_FOUND
+    tasks.create.assert_not_awaited()
 
 
 async def test_missing_task_raises_domain_exception_not_http(parts):
-    svc, tasks, _, _ = parts
-    tasks.get.return_value = None
+    svc, _, resources = parts
+    resources.task.side_effect = NotFoundException(TASK_NOT_FOUND)
     with pytest.raises(NotFoundException) as exc:
         await svc.get_task(USER, 1)
     assert exc.value.message == TASK_NOT_FOUND
-
-
-async def test_missing_project_raises_domain_exception(parts):
-    svc, _, projects, _ = parts
-    projects.get.return_value = None
-    with pytest.raises(NotFoundException) as exc:
-        await svc.create_task(TaskCreate(title="x", project_id=1), USER)
-    assert exc.value.message == PROJECT_NOT_FOUND

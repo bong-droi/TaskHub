@@ -40,8 +40,8 @@ async def test_list_and_get_visible_to_all_members_only(team, anon):
 async def test_pagination(team, anon):
     for i in range(3):
         await anon.post(_list_url(team), json={"name": f"P{i}"}, headers=team.h["alice"])
-    page = (await anon.get(f"{_list_url(team)}?skip=1&limit=2", headers=team.h["alice"])).json()
-    assert page["total"] == 4 and len(page["items"]) == 2
+    page = (await anon.get(f"{_list_url(team)}?page=2&limit=2", headers=team.h["alice"])).json()
+    assert page["total"] == 4 and page["pages"] == 2 and len(page["items"]) == 2
 
 
 async def test_update_rules(team, anon):

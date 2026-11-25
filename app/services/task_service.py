@@ -4,39 +4,35 @@ from app.core.constants import (
     ASSIGNEE_NOT_FOUND,
     ASSIGNEE_NOT_IN_WORKSPACE,
     INSUFFICIENT_PERMISSION,
-    PROJECT_ARCHIVED,
-    PROJECT_NOT_FOUND,
-    TASK_NOT_FOUND,
+    LABEL_NOT_IN_PROJECT,
 )
 from app.core.exceptions import (
     BadRequestException,
-    ConflictException,
     ForbiddenException,
     NotFoundException,
 )
 from app.core.permissions import READ_ROLES, WRITE_ROLES, can_delete_task
-from app.models import Project, Task, User
-from app.models.enums import ProjectStatus, UserRole, WorkspaceRole
-from app.repositories.project_repository import ProjectRepository
+from app.models import Task, User
+from app.models.enums import TaskPriority, TaskStatus, UserRole
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.task import TaskCreate, TaskUpdate
-from app.services.access import AccessControl
+from app.schemas.common import Page
+from app.schemas.task import TaskCreateInProject, TaskRead, TaskUpdate
+from app.services.resource_access import ResourceAccess
 
 
 class TaskService:
     def __init__(
         self,
         tasks: TaskRepository,
-        projects: ProjectRepository,
         users: UserRepository,
-        access: AccessControl,
+        resources: ResourceAccess,
     ) -> None:
         self.tasks = tasks
-        self.projects = projects
         self.users = users
-        self.access = access
+        self.resources = resources
 
+    # ------------------------------------------------------------------ đọc
     async def list_tasks(self, user: User, skip: int, limit: int) -> tuple[list[Task], int]:
         if user.role == UserRole.ADMIN:
             return await self.tasks.list(skip, limit), await self.tasks.count()
@@ -46,49 +42,83 @@ class TaskService:
             await self.tasks.count_visible(user.id),
         )
 
-    async def _load(self, user: User, task_id: int, allowed) -> tuple[Task, Project, WorkspaceRole]:
-        task = await self.tasks.get(task_id)
-        if task is None:
-            raise NotFoundException(TASK_NOT_FOUND)  # chỉ MỘT chỗ raise cho Task
-        project = await self.projects.get(task.project_id)
-        role = await self.access.require(user, project.workspace_id, allowed, TASK_NOT_FOUND)
-        return task, project, role
-
     async def get_task(self, user: User, task_id: int) -> Task:
-        task, _, _ = await self._load(user, task_id, READ_ROLES)
-        return task
+        return (await self.resources.task(user, task_id, READ_ROLES)).task
 
+    async def list_in_project(
+        self,
+        user: User,
+        project_id: int,
+        page: int,
+        limit: int,
+        *,
+        status: TaskStatus | None = None,
+        priority: TaskPriority | None = None,
+        assignee_id: int | None = None,
+        label_id: int | None = None,
+    ) -> Page[TaskRead]:
+        await self.resources.project(user, project_id, READ_ROLES)
+        filters = {
+            "status": status,
+            "priority": priority,
+            "assignee_id": assignee_id,
+            "label_id": label_id,
+        }
+        skip = (page - 1) * limit
+        items = await self.tasks.list_by_project(project_id, skip, limit, **filters)
+        total = await self.tasks.count_by_project(project_id, **filters)
+        return Page[TaskRead](
+            items=[TaskRead.model_validate(t) for t in items],
+            total=total,
+            page=page,
+            limit=limit,
+        )
+
+    # ------------------------------------------------------------------ ghi
     async def _ensure_assignee(self, assignee_id: int | None, workspace_id: int) -> None:
         if assignee_id is None:
             return
         if await self.users.get(assignee_id) is None:
             raise NotFoundException(ASSIGNEE_NOT_FOUND)
-        if not await self.access.is_member(assignee_id, workspace_id):
+        if not await self.resources.is_member(assignee_id, workspace_id):
             raise BadRequestException(ASSIGNEE_NOT_IN_WORKSPACE)
 
-    @staticmethod
-    def _ensure_active(project: Project) -> None:
-        if project.status == ProjectStatus.ARCHIVED:
-            raise ConflictException(PROJECT_ARCHIVED)
-
-    async def create_task(self, payload: TaskCreate, user: User) -> Task:
-        project = await self.projects.get(payload.project_id)
-        if project is None:
-            raise NotFoundException(PROJECT_NOT_FOUND)
-        await self.access.require(user, project.workspace_id, WRITE_ROLES, PROJECT_NOT_FOUND)
-        self._ensure_active(project)
+    async def create_task(self, user: User, project_id: int, payload: TaskCreateInProject) -> Task:
+        """`project_id` truyền riêng (từ URL hoặc body của endpoint cũ), KHÔNG dựng lại schema:
+        dựng lại sẽ validate lần hai và có thể ném ValidationError trong service (thành 500)."""
+        project = await self.resources.project(user, project_id, WRITE_ROLES)
+        self.resources.ensure_active(project)
         await self._ensure_assignee(payload.assignee_id, project.workspace_id)
-        return await self.tasks.create({**payload.model_dump(), "created_by": user.id})
+        data = payload.model_dump(exclude={"project_id"})  # TaskCreate (endpoint cũ) có field này
+        return await self.tasks.create({**data, "project_id": project.id, "created_by": user.id})
 
     async def update_task(self, user: User, task_id: int, payload: TaskUpdate) -> Task:
-        task, project, _ = await self._load(user, task_id, WRITE_ROLES)
-        self._ensure_active(project)
+        ctx = await self.resources.task(user, task_id, WRITE_ROLES)
+        self.resources.ensure_active(ctx.project)
         data = payload.model_dump(exclude_unset=True)
-        await self._ensure_assignee(data.get("assignee_id"), project.workspace_id)
-        return await self.tasks.update(task, data)
+        await self._ensure_assignee(data.get("assignee_id"), ctx.project.workspace_id)
+        return await self.tasks.update(ctx.task, data)
 
     async def delete_task(self, user: User, task_id: int) -> None:
-        task, _, role = await self._load(user, task_id, READ_ROLES)
-        if not can_delete_task(role, task, user):
+        ctx = await self.resources.task(user, task_id, READ_ROLES)
+        if not can_delete_task(ctx.role, ctx.task, user):
             raise ForbiddenException(INSUFFICIENT_PERMISSION)
-        await self.tasks.delete(task)
+        await self.tasks.delete(ctx.task)
+
+    # ------------------------------------------------------------------ gắn / gỡ label
+    async def _task_and_label(self, user: User, task_id: int, label_id: int):
+        ctx = await self.resources.task(user, task_id, WRITE_ROLES)
+        self.resources.ensure_active(ctx.project)
+        # Phải có quyền xem label: label của workspace khác thì như không tồn tại (404)
+        label = (await self.resources.label(user, label_id, READ_ROLES)).label
+        if label.project_id != ctx.project.id:
+            raise BadRequestException(LABEL_NOT_IN_PROJECT)
+        return ctx.task, label
+
+    async def add_label(self, user: User, task_id: int, label_id: int) -> Task:
+        task, label = await self._task_and_label(user, task_id, label_id)
+        return await self.tasks.add_label(task, label)
+
+    async def remove_label(self, user: User, task_id: int, label_id: int) -> Task:
+        task, label = await self._task_and_label(user, task_id, label_id)
+        return await self.tasks.remove_label(task, label)
