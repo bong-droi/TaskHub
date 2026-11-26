@@ -7,7 +7,10 @@ DESCRIPTION_MAX_LENGTH = 2000
 
 # Pagination
 DEFAULT_PAGE_LIMIT = 20
+DEFAULT_LIMIT = DEFAULT_PAGE_LIMIT
 MAX_PAGE_LIMIT = 100
+MAX_LIMIT = MAX_PAGE_LIMIT
+MEMORY_CACHE_MAX_KEYS = 1024
 
 # Thông báo lỗi
 TASK_NOT_FOUND = "Task không tồn tại"
@@ -17,6 +20,7 @@ ASSIGNEE_NOT_FOUND = "Assignee không tồn tại"
 # Auth
 PASSWORD_MIN_LENGTH = 8
 BCRYPT_MAX_BYTES = 72  # bcrypt chỉ xét 72 byte đầu của mật khẩu
+PASSWORD_MAX_LENGTH = BCRYPT_MAX_BYTES
 FULL_NAME_MAX_LENGTH = 100
 EMAIL_ALREADY_REGISTERED = "Email đã được đăng ký"
 INVALID_CREDENTIALS = "Email hoặc mật khẩu không đúng"

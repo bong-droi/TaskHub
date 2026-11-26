@@ -1,4 +1,6 @@
-from sqlalchemy import func, select
+from typing import Any
+
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import selectinload
 
 from app.models import Workspace, WorkspaceMember
@@ -10,15 +12,27 @@ class WorkspaceRepository(BaseRepository[Workspace]):
     model = Workspace
 
     async def create_with_owner(self, name: str, owner_id: int) -> Workspace:
-        """Tạo workspace và membership OWNER trong CÙNG một transaction."""
+        """Tạo workspace và membership OWNER trong cùng một transaction (flush + commit)."""
         ws = Workspace(name=name, owner_id=owner_id)
-        ws.members.append(WorkspaceMember(user_id=owner_id, role=WorkspaceRole.OWNER))
         self.session.add(ws)
+        await self.flush()
+        self.session.add(
+            WorkspaceMember(workspace_id=ws.id, user_id=owner_id, role=WorkspaceRole.OWNER)
+        )
         await self.session.commit()
         await self.session.refresh(ws)
         return ws
 
-    def _of_user(self, user_id: int):
+    async def get_by_id_with_details(self, workspace_id: int) -> Workspace | None:
+        """Nạp tường minh members + projects bằng selectinload khi cần lấy chi tiết."""
+        stmt = (
+            select(Workspace)
+            .where(Workspace.id == workspace_id)
+            .options(selectinload(Workspace.members), selectinload(Workspace.projects))
+        )
+        return await self.session.scalar(stmt)
+
+    def _of_user(self, user_id: int) -> Select[Any]:
         return (
             select(Workspace)
             .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)

@@ -61,7 +61,8 @@ class RedisCache:
         return cls(client)
 
     async def get(self, key: str) -> str | None:
-        return await self._client.get(key)
+        val = await self._client.get(key)
+        return str(val) if val is not None else None
 
     async def set(self, key: str, value: str, ttl: int) -> None:
         await self._client.set(key, value, ex=ttl)

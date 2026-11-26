@@ -29,7 +29,12 @@ async def list_comments(
     task_id: IdPath, user: CurrentUser, service: CommentServiceDep, page: PaginationDep
 ):
     items, total = await service.list_for_task(user, task_id, page.skip, page.limit)
-    return Page[CommentRead](items=items, total=total, page=page.page, limit=page.limit)
+    return Page[CommentRead].create(
+        items=[CommentRead.model_validate(item) for item in items],
+        total=total,
+        page=page.page,
+        limit=page.limit,
+    )
 
 
 @router.delete(

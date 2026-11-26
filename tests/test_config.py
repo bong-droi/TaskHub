@@ -21,7 +21,7 @@ def clean_env(monkeypatch):
 
 def make(**overrides) -> Settings:
     overrides.setdefault("SECRET_KEY", GOOD_SECRET)
-    return Settings(_env_file=None, **overrides)  # không đọc .env thật
+    return Settings(_env_file=None, **overrides)  # type: ignore[call-arg]  # không đọc .env thật
 
 
 def test_defaults_are_valid_for_development():
@@ -206,12 +206,12 @@ def test_env_files_layer_and_real_env_wins(tmp_path, monkeypatch):
         "CACHE_TTL_SECONDS=10\nLOG_LEVEL=DEBUG\n"
     )
     prod.write_text("CACHE_TTL_SECONDS=99\n", encoding="utf-8")
-    s = Settings(_env_file=(base, prod))
+    s = Settings(_env_file=(base, prod))  # type: ignore[call-arg]
     assert s.REDIS_URL == "redis://base:6379/0"  # chỉ có ở .env
     assert s.CACHE_TTL_SECONDS == 99  # .env.production (nạp sau) đè .env
     assert s.LOG_LEVEL == "DEBUG"
     monkeypatch.setenv("CACHE_TTL_SECONDS", "5")  # biến môi trường thật thắng cả hai file
-    assert Settings(_env_file=(base, prod)).CACHE_TTL_SECONDS == 5
+    assert Settings(_env_file=(base, prod)).CACHE_TTL_SECONDS == 5  # type: ignore[call-arg]
 
 
 def test_env_file_with_vietnamese_comments_is_readable(tmp_path):
@@ -220,7 +220,7 @@ def test_env_file_with_vietnamese_comments_is_readable(tmp_path):
         f"# Cấu hình thử: ký tự tiếng Việt\nSECRET_KEY={GOOD_SECRET}\nCACHE_TTL_SECONDS=12\n",
         encoding="utf-8",
     )
-    assert Settings(_env_file=env).CACHE_TTL_SECONDS == 12  # không lỗi cp1252 trên Windows
+    assert Settings(_env_file=env).CACHE_TTL_SECONDS == 12  # type: ignore[call-arg]
 
 
 def test_secrets_never_appear_in_repr():

@@ -29,7 +29,12 @@ async def list_labels(
     project_id: IdPath, user: CurrentUser, service: LabelServiceDep, page: PaginationDep
 ):
     items, total = await service.list_in_project(user, project_id, page.skip, page.limit)
-    return Page[LabelRead](items=items, total=total, page=page.page, limit=page.limit)
+    return Page[LabelRead].create(
+        items=[LabelRead.model_validate(item) for item in items],
+        total=total,
+        page=page.page,
+        limit=page.limit,
+    )
 
 
 @router.patch("/labels/{label_id}", response_model=LabelRead, summary="Sửa label (OWNER/EDITOR)")

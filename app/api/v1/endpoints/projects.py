@@ -29,7 +29,12 @@ async def list_projects(
     workspace_id: IdPath, user: CurrentUser, service: ProjectServiceDep, page: PaginationDep
 ):
     items, total = await service.list_in_workspace(user, workspace_id, page.skip, page.limit)
-    return Page[ProjectRead](items=items, total=total, page=page.page, limit=page.limit)
+    return Page[ProjectRead].create(
+        items=[ProjectRead.model_validate(item) for item in items],
+        total=total,
+        page=page.page,
+        limit=page.limit,
+    )
 
 
 @router.get("/projects/{project_id}", response_model=ProjectRead, summary="Chi tiết project")

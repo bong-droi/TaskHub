@@ -1,4 +1,7 @@
-from sqlalchemy import func, select
+from typing import Any
+
+from sqlalchemy import Select, func, select
+from sqlalchemy.orm import selectinload
 
 from app.models import Label, Project, Task, WorkspaceMember, task_labels
 from app.models.enums import TaskPriority, TaskStatus
@@ -8,7 +11,16 @@ from app.repositories.base import BaseRepository
 class TaskRepository(BaseRepository[Task]):
     model = Task
 
-    def _visible_to(self, user_id: int):
+    async def get_by_id_with_details(self, task_id: int) -> Task | None:
+        """Chỉ dùng selectinload tường minh khi cần lấy chi tiết task kèm labels và comments."""
+        stmt = (
+            select(Task)
+            .where(Task.id == task_id)
+            .options(selectinload(Task.labels), selectinload(Task.comments))
+        )
+        return await self.session.scalar(stmt)
+
+    def _visible_to(self, user_id: int) -> Select[Any]:
         """Task thuộc project của các workspace mà user là thành viên."""
         return (
             select(Task)
@@ -33,8 +45,8 @@ class TaskRepository(BaseRepository[Task]):
         priority: TaskPriority | None,
         assignee_id: int | None,
         label_id: int | None,
-    ) -> list:
-        conds = [Task.project_id == project_id]
+    ) -> list[Any]:
+        conds: list[Any] = [Task.project_id == project_id]
         if status is not None:
             conds.append(Task.status == status)
         if priority is not None:

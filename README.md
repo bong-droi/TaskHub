@@ -1,218 +1,121 @@
-# TaskHub – FastAPI Training Project
+# TaskHub – FastAPI Production-Ready Project
 
-Sample app xây dần theo từng ngày. Kiến trúc: **Router → Service → Repository → DB**.
+Ứng dụng quản lý công việc (**Task Management RESTful API**) xây dựng bằng **FastAPI**, **SQLAlchemy 2.x Async**, **Alembic**, **Pydantic v2**, **Redis 7**, **PostgreSQL 16** theo kiến trúc phân tầng **Router → Service → Repository → Database**.
 
-| Ngày | Nội dung | Tag |
+| Session / Ngày | Nội dung | Nhánh / Tag |
 |---|---|---|
-| 1 | Core Setup, Routing, Pydantic v2, DI (in-memory) | `day-1` |
-| 2 | SQLAlchemy 2.x async, Repository Pattern, Alembic | `day-2` |
-| 3 | Authentication & Security: bcrypt, JWT access/refresh, profile | `day-3` |
-| 4 | Authorization & RBAC, Workspace, Project | `day-4` |
-| 5 | Task nâng cao (lọc, phân trang), Label, Comment, Middleware | `day-5` |
-| 6 | Cấu hình pydantic-settings, Redis cache, Background task email | `day-6` |
+| 1 | Core Setup, Routing, Pydantic v2, Dependency Injection | `day-1` |
+| 2 | SQLAlchemy 2.x Async, Repository Pattern, Alembic Migrations | `day-2` |
+| 3 | Authentication & Security: bcrypt, JWT Access/Refresh Rotation, Profile | `day-3` |
+| 4 | Authorization & RBAC (`OWNER` / `EDITOR` / `VIEWER`), Workspace, Project | `day-4` |
+| 5 | Task Filtering & Pagination, Label, Comment, Request Context Middleware | `day-5` |
+| 6 | Cấu hình `pydantic-settings`, Redis Cache (`X-Cache`), Background Email | `day-6` |
+| 7 | Docker Multi-Stage Build (Non-Root User) & Docker Compose Stack (Postgres 16 + Redis 7) | `day-7` |
+| 8 | Code Review, Refactor (DRY), Performance Optimization, Ruff/Mypy 100%, OpenAPI Error Docs & E2E Testing | `day-8` |
 
-## Chạy nhanh (SQLite)
+---
+
+## 1. Cài đặt & Chạy Local (Development với SQLite)
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+# Linux / macOS:
+source .venv/bin/activate
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+
 pip install -r requirements-dev.txt  # production chỉ cần: pip install -r requirements.txt
 cp .env.example .env                 # BẮT BUỘC đặt SECRET_KEY (>= 32 ký tự) trong .env hoặc env
-alembic upgrade head                 # tạo bảng
-python -m scripts.seed               # dữ liệu mẫu
+alembic upgrade head                 # Chạy migration tạo bảng
+python -m scripts.seed               # Tạo dữ liệu mẫu (admin@taskhub.dev / Admin@12345)
 uvicorn app.main:app --reload
 ```
-Swagger: http://127.0.0.1:8000/docs
 
-Đăng nhập (seed): `admin@taskhub.dev` / `Admin@12345`. Trong Swagger bấm **Authorize**, nhập email vào ô `username`.
+- **Swagger UI**: http://127.0.0.1:8000/docs
+- **ReDoc**: http://127.0.0.1:8000/redoc
+- **Tài khoản mẫu (seed)**: `admin@taskhub.dev` / `Admin@12345` (bấm **Authorize** trong Swagger, nhập email vào ô `username`).
 
-Thử tạo task (cần token): `POST /api/v1/tasks` với `{"title": "Hello", "project_id": 1}`
+---
 
-## Auth (Ngày 3)
-| Endpoint | Mô tả |
-|---|---|
-| `POST /auth/register` | Đăng ký (role luôn là MEMBER) |
-| `POST /auth/login` | Form `username`(=email) + `password` -> access + refresh token |
-| `POST /auth/refresh` | Đổi refresh token lấy cặp mới (rotation, mỗi token dùng 1 lần) |
-| `POST /auth/logout` | Thu hồi refresh token |
-| `GET/PATCH /users/me` | Xem / sửa profile |
-| `POST /users/me/password` | Đổi mật khẩu, thu hồi mọi refresh token |
+## 2. Chạy bằng Docker Compose (Session 7 – Production Stack)
 
-- Mật khẩu băm bằng **bcrypt**; JWT bằng **PyJWT** (HS256), access 15 phút, refresh 7 ngày.
-- Refresh token lưu `jti` trong bảng `refresh_tokens` để thu hồi; dùng lại token đã xoay sẽ thu hồi cả chuỗi.
-- **Đặt `SECRET_KEY` riêng** trong `.env` khi chạy thật.
-- Toàn bộ `/tasks` yêu cầu đăng nhập; `tasks.created_by` lấy từ user hiện tại.
-- Lỗi auth là exception nghiệp vụ (`UnauthorizedException`, `ConflictException`...) + message trong `core/constants.py`.
-- Schema chứa mật khẩu **không** kế thừa `BaseSchema` (không được strip mật khẩu).
+Toàn bộ hạ tầng gồm **FastAPI App (`taskhub_app`) + PostgreSQL 16 (`taskhub_db`) + Redis 7 (`taskhub_redis`)** được khởi chạy chỉ bằng một lệnh:
 
-
-## PostgreSQL / MySQL
-Đổi `DATABASE_URL` (xem `.env.example`) và cài driver `asyncpg` hoặc `aiomysql`, rồi chạy lại `alembic upgrade head`.
-
-## Test
 ```bash
-pytest -q        # dùng SQLite in-memory, không đụng taskhub.db
+cp .env.example .env
+# Bắt buộc đặt SECRET_KEY tối thiểu 32 ký tự (khác giá trị mẫu khi APP_ENV=production):
+# python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+docker compose up --build -d
 ```
 
-## Alembic cheat-sheet
-```bash
-alembic revision --autogenerate -m "mô tả"   # sinh migration từ thay đổi model
-alembic upgrade head                          # áp dụng
-alembic downgrade -1                          # lùi 1 bước
-alembic check                                 # model và DB có lệch nhau không
-```
+### Điểm nổi bật của Docker Stack:
+- **Multi-Stage `Dockerfile`**:
+  - **Stage 1 (`builder`)**: Dùng `python:3.12-slim` cài đặt toàn bộ thư viện runtime trong `requirements.txt` vào `/install` với `--no-cache-dir`.
+  - **Stage 2 (`runtime`)**: Chỉ copy `/install` từ stage `builder` và mã nguồn cần thiết (`app/`, `migrations/`, `scripts/`, `alembic.ini`).
+  - **Non-Root User**: Chạy dưới quyền `appuser` (UID `1001`, group `appgroup`) thay vì `root`.
+  - **Auto-Migrate**: Khi container khởi động, tự động chạy `alembic upgrade head` trước khi bật `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+- **`.dockerignore`**: Loại bỏ `.venv`, `.env*`, `*.db`, `.git`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache` để giảm kích thước image và không làm lộ bí mật local.
+- **`docker-compose.yml`**:
+  - `db` (`postgres:16-alpine`): Lưu trữ bền vững qua volume `postgres_data` và có `healthcheck` (`pg_isready`).
+  - `redis` (`redis:7-alpine`): Có `healthcheck` (`redis-cli ping`).
+  - `app` (`taskhub_app`): Bắt buộc khai báo `${SECRET_KEY:?Set SECRET_KEY in .env}` và chỉ khởi động sau khi `db` và `redis` đạt trạng thái `service_healthy`.
 
-## Cấu trúc (Ngày 2)
-```
-app/
-├── main.py                  # app + lifespan (dispose engine)
-├── core/config.py           # DATABASE_URL, JWT settings
-├── core/security.py         # bcrypt + JWT
-├── db/base.py, session.py   # Base, naming convention, engine, get_db (yield)
-├── models/                  # 8 bảng: users, workspaces, workspace_members, projects,
-│                            #         tasks, labels, task_labels, comments
-├── repositories/base.py     # BaseRepository[T]: get/list/count/create/update/delete
-├── core/permissions.py      # ma trận quyền theo role
-├── core/middleware.py       # request id, process time, access log
-├── core/cache.py            # Redis / NullCache
-├── core/email.py            # console / SMTP
-├── services/task_cache.py   # cache danh sách task (version counter)
-├── services/notifier.py     # email nền khi giao task
-├── services/                # business logic (async), access.py = kiểm tra quyền
-├── schemas/                 # Pydantic v2 + Page[T]
-└── api/                     # deps.py (DI), v1/endpoints
-migrations/                  # Alembic async env + 0001_initial_schema, 0002_add_refresh_tokens
-scripts/seed.py
-tests/                       # API tests + model/cascade tests
-```
+---
 
-## Ghi chú thiết kế
-- `expire_on_commit=False` để object vẫn đọc được sau commit khi dùng async.
-- SQLite cần bật `PRAGMA foreign_keys=ON` (đã làm trong `db/session.py`).
-- `tasks.created_by` là NOT NULL và có index, luôn gán từ `current_user`.
-- Repository tự `commit`; có thể nâng cấp lên Unit of Work nếu cần transaction đa repo.
+## 3. Biến môi trường (`.env`)
 
-## Phân quyền RBAC (Ngày 4)
-Role trong workspace: **OWNER**, **EDITOR**, **VIEWER**. User có role hệ thống **ADMIN** (seed) được coi như OWNER của mọi workspace.
+Mọi cấu hình được kiểm tra **fail-fast** khi khởi động tại `app/core/config.py`:
 
-| Hành động | OWNER | EDITOR | VIEWER |
-|---|:-:|:-:|:-:|
-| Xem workspace, project, task | x | x | x |
-| Tạo/sửa project, archive project | x | x | |
-| Tạo/sửa task | x | x | |
-| Xoá task | mọi task | chỉ task mình tạo | |
-| Sửa/xoá workspace, xoá project, mời/xoá thành viên | x | | |
-
-- **Không phải thành viên -> 404** (không lộ resource có tồn tại hay không); **là thành viên nhưng thiếu quyền -> 403**.
-- Ma trận quyền nằm một chỗ: `app/core/permissions.py`; kiểm tra quyền: `app/services/access.py`.
-- Assignee của task phải là thành viên của workspace. Project đã archive là read-only (409 khi sửa/tạo task).
-- `GET /tasks` chỉ trả task thuộc workspace mình là thành viên.
-
-| Endpoint | Quyền |
-|---|---|
-| `POST/GET /workspaces`, `GET /workspaces/{id}` | đăng nhập / thành viên |
-| `PATCH/DELETE /workspaces/{id}` | OWNER |
-| `POST/GET /workspaces/{id}/members`, `DELETE .../members/{user_id}` | OWNER mời/xoá, thành viên xem |
-| `POST/GET /workspaces/{id}/projects` | OWNER/EDITOR tạo, thành viên xem |
-| `GET/PATCH /projects/{id}`, `POST /projects/{id}/archive` | thành viên xem, OWNER/EDITOR sửa |
-| `DELETE /projects/{id}` | OWNER |
-
-## Task nâng cao, Label, Comment, Middleware (Ngày 5)
-
-### Phân trang và lọc
-Mọi endpoint danh sách dùng `?page=1&limit=20` (`page` từ 1, `limit` tối đa 100) và trả về:
-`{"items": [...], "total": 42, "page": 1, "limit": 20, "pages": 3}`.
-
-`GET /projects/{id}/tasks` lọc được theo `status`, `priority`, `assignee_id`, `label_id` (kết hợp bằng AND):
-```
-GET /api/v1/projects/1/tasks?status=TODO&priority=HIGH&assignee_id=2&page=1&limit=10
-```
-
-| Endpoint | Quyền |
-|---|---|
-| `GET/POST /projects/{id}/tasks` | thành viên xem, OWNER/EDITOR tạo (project_id lấy từ URL) |
-| `PATCH /tasks/{id}` (đổi status, priority, due_date, assignee) | OWNER/EDITOR |
-| `POST/GET /projects/{id}/labels`, `PATCH/DELETE /labels/{id}` | thành viên xem, OWNER/EDITOR ghi |
-| `POST/DELETE /tasks/{id}/labels/{label_id}` | OWNER/EDITOR (idempotent) |
-| `POST/GET /tasks/{id}/comments` | OWNER/EDITOR thêm, thành viên xem |
-| `DELETE /comments/{id}` | tác giả, hoặc OWNER |
-
-- Tên label duy nhất trong project (không phân biệt hoa thường); màu dạng `#RRGGBB`.
-- Chỉ gắn được label cùng project với task (400 nếu khác project).
-- Task trả về kèm danh sách `labels`.
-- Project đã archive: không tạo/sửa task, label, comment (409); vẫn xem và xoá được.
-
-### Middleware và xử lý lỗi
-- Mọi response có `X-Request-ID` (nhận từ client nếu hợp lệ, không thì tự sinh) và `X-Process-Time`; mỗi request được ghi một dòng access log kèm request id.
-- Lỗi không lường trước trả `500` chung chung `{"detail": ..., "request_id": ...}`, **không lộ stack trace**; chi tiết chỉ nằm trong log, tra theo `request_id`.
-- Vi phạm ràng buộc DB lọt qua service (hai request cùng lúc) trả `409` thay vì `500`.
-
-### Giới hạn đầu vào (tránh lỗi 500 do số quá lớn)
-Mọi số nguyên đầu vào đều có cận trên, vì số vượt giới hạn của DB sẽ làm truy vấn lỗi (500) thay vì từ chối bằng 422:
-
-| Đầu vào | Giới hạn | Định nghĩa |
+| Biến | Mặc định (dev) | Mô tả |
 |---|---|---|
-| id trên URL (`/projects/{project_id}`, ...) | `1 .. 2147483647` | `IdPath` trong `app/api/params.py` |
-| id trong body, filter `assignee_id`, `label_id` | `1 .. 2147483647` | `DbId` trong `app/schemas/types.py` |
-| `page` | `1 .. 100000` (offset tối đa 10 triệu) | `Pagination` trong `app/api/deps.py` |
+| `APP_ENV` | `development` | `development` \| `test` \| `production` (**phải đặt bằng OS env thật, không đặt trong `.env`**) |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./taskhub.db` | URL kết nối DB async (`sqlite+aiosqlite://`, `postgresql+asyncpg://`, `mysql+aiomysql://`) |
+| `SECRET_KEY` | *(bắt buộc)* | Khoá ký JWT HS256 (tối thiểu 32 ký tự, **không có default**, chặn khoá mẫu trên production) |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Thời hạn Access Token (phút) |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Thời hạn Refresh Token (ngày) |
+| `BCRYPT_ROUNDS` | `12` | Độ mạnh bcrypt (`4..16`, production `>= 10`) |
+| `REDIS_URL` | `""` *(tắt cache)* | Ví dụ `redis://localhost:6379/0` (hoặc `redis://redis:6379/0` trong Docker Compose) |
+| `CACHE_TTL_SECONDS` | `60` | TTL của cache danh sách task (`1 .. VERSION_TTL_SECONDS`) |
+| `EMAIL_BACKEND` | `console` | `console` (ghi log không chứa email PII) hoặc `smtp` (gửi thật qua `SMTP_HOST`; chặn `SMTP_USER` khi `SMTP_STARTTLS=false`) |
+| `LOG_LEVEL` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` |
 
-Khi thêm endpoint mới, **dùng `IdPath` cho id trên URL và `DbId` cho id trong schema**. `tests/test_input_bounds.py` quét toàn bộ endpoint theo OpenAPI nên endpoint nào quên giới hạn sẽ bị bắt.
+---
 
-### Quy ước code (rút ra từ review)
-- **Một chỗ duy nhất** lấy resource + kiểm quyền + kiểm archive: `app/services/resource_access.py` (`ResourceAccess`). Service không tự viết lại `get -> 404 -> kiểm quyền`; luật project archive chỉ nằm ở `ensure_active`.
-- `create_task(user, project_id, payload)` nhận `project_id` riêng, không dựng lại schema trong service.
-- Schema PATCH dùng `not_nullable(...)` (`schemas/base.py`) cho field NOT NULL; mọi message validation nằm trong `core/constants.py` (có test chặn viết cứng).
-- **Tên label không phân biệt hoa thường** (`Bug` = `bug`), được bảo đảm bởi unique index `(project_id, lower(name))`. Lưu ý: `lower()` của SQLite chỉ xử lý chữ ASCII (`Đỏ` khác `đỏ`); PostgreSQL xử lý đủ Unicode.
+## 4. Kiến trúc, Tối ưu & Chất lượng mã nguồn (Session 8)
 
-> **Nâng cấp từ bản cũ của migration `0003`:** migration này đã được sửa (đổi ràng buộc thường sang unique index không phân biệt hoa thường). Nếu DB của bạn đã chạy `0003` cũ, `alembic upgrade head` sẽ **không làm gì** và `alembic check` báo lệch. Cách sửa: với DB dev SQLite, xoá `taskhub.db` rồi chạy lại `alembic upgrade head` và `python -m scripts.seed`. Với DB cần giữ dữ liệu: chạy `alembic downgrade 0002` **trước khi** cập nhật code, rồi `alembic upgrade head` sau khi cập nhật.
+- **DRY (Don't Repeat Yourself)**:
+  - Tập trung toàn bộ hằng số giới hạn độ dài, phân trang và thông báo lỗi tại `app/core/constants.py` (`TITLE_MIN_LENGTH`, `TITLE_MAX_LENGTH`, `PASSWORD_MAX_LENGTH = 72`, `DEFAULT_LIMIT`, `MAX_LIMIT = 100`, `VERSION_TTL_SECONDS`, `MEMORY_CACHE_MAX_KEYS`, v.v.).
+  - `BaseSchema` (`app/schemas/base.py`) bật sẵn `str_strip_whitespace=True` và cung cấp `not_nullable` / `reject_explicit_nulls` để chặn `null` gửi tường minh vào các trường `NOT NULL` khi gọi `PATCH`.
+  - Chuẩn hoá phân trang qua factory `Page.create()` / `PaginatedResponse.create()` (`app/schemas/common.py`).
+  - Gom toàn bộ kiểm tra tồn tại + phân quyền RBAC + trạng thái archive của project về `ResourceAccess` (`app/services/resource_access.py`).
+- **Tối ưu Database / Cache / Async**:
+  - **SQLAlchemy Loading**: Không dùng `lazy="selectin"` tràn lan trên `User`/`Workspace`/`Project`/`Comment`; kết hợp `passive_deletes=True` để DB tự xử lý `ON DELETE CASCADE` và dùng `selectinload` tường minh tại `get_by_id_with_details`.
+  - **Unit-of-Work Transaction**: `BaseRepository` hỗ trợ `flush()` và gom nhiều thao tác ghi (như tạo `Workspace` + thêm `WorkspaceMember` role `OWNER`) vào 1 lần `commit` duy nhất.
+  - **Non-blocking Async**: Đưa `bcrypt` hashing/verification sang threadpool (`run_in_threadpool` trong `app/core/security.py`) để không làm nghẽn Event Loop của FastAPI.
+- **OpenAPI Error Documentation**:
+  - Chuẩn hoá `ErrorResponse` / `InternalErrorResponse` (`app/schemas/error.py`) và `error_responses(...)` (`app/api/responses.py`) cho toàn bộ endpoints trên Swagger UI & ReDoc.
 
-## Cấu hình, Redis cache, Email nền (Ngày 6)
+---
 
-### Cấu hình (`pydantic-settings`)
-Mọi cấu hình nằm ở `app/core/config.py` (class `Settings`), đọc từ biến môi trường và file `.env`.
-Danh sách đầy đủ và giải thích từng biến: xem `.env.example`.
+## 5. Alembic Migration, Kiểm thử & Linter / Type Check
 
-- **Fail-fast:** cấu hình sai thì app **không khởi động được** và báo rõ biến nào sai. Ví dụ:
-  `DATABASE_URL` dùng driver đồng bộ, `SECRET_KEY` ngắn hơn 32 ký tự, `REDIS_URL` sai dạng, `EMAIL_BACKEND=smtp` mà thiếu `SMTP_HOST`.
-- **Nhiều môi trường:** đặt `APP_ENV` (development, test, production) **bằng biến môi trường thật**. Thứ tự ưu tiên: biến môi trường > `.env.<APP_ENV>` > `.env` > mặc định.
-  ```powershell
-  $env:APP_ENV = "production"      # PowerShell (Linux/Mac: export APP_ENV=production)
-  ```
-- **Production** bắt buộc đổi `SECRET_KEY` (không được dùng khoá mặc định) và `BCRYPT_ROUNDS >= 10`.
-- `SECRET_KEY` và `SMTP_PASSWORD` là `SecretStr`: không bị lộ khi `print`/log. File `.env.*` (trừ `.env.example`) đã được `.gitignore`.
-
-### Redis cache cho `GET /projects/{id}/tasks`
-Bật bằng cách đặt `REDIS_URL` (để trống = tắt cache, app vẫn chạy bình thường):
+### Alembic Migrations
 ```bash
-docker run -d --name taskhub-redis -p 6379:6379 redis:7
-# trong .env:  REDIS_URL=redis://localhost:6379/0
-```
-Response có header **`X-Cache: HIT | MISS | BYPASS`** (BYPASS = cache tắt) để quan sát.
-
-- **Key** dạng `tasks:p{project}:v{version}:{bộ lọc + trang}`, ví dụ `tasks:p1:v3:status=*&priority=HIGH&assignee=*&label=*&page=1&limit=20`. Mỗi tổ hợp lọc/trang có một key riêng, hết hạn sau `CACHE_TTL_SECONDS` (mặc định 60s).
-- **Vô hiệu hoá bằng version counter:** mỗi project có số phiên bản `tasks:ver:{project}`. Tạo/sửa/xoá task, gắn/gỡ label, đổi tên/xoá label, tạo/xoá project đều **tăng version** (`INCR`, O(1)); key cũ tự mồ côi rồi hết hạn. Không dùng `KEYS`/`SCAN`.
-- **Quyền được kiểm tra trước khi đọc cache**, nên dữ liệu trong cache dùng chung an toàn; bị gỡ khỏi workspace là mất quyền xem ngay.
-- **Redis lỗi/chết không làm hỏng API:** ghi cảnh báo rồi chạy thẳng bằng DB (timeout kết nối 1 giây).
-
-### Email khi được giao task
-Giao task cho **người khác** (lúc tạo, hoặc `PATCH assignee_id` sang người mới) thì gửi email cho người được giao, chạy nền bằng `BackgroundTasks` (response trả về trước). Không gửi khi tự giao cho mình, khi giao lại đúng người cũ, hoặc khi request thất bại. Lỗi gửi email chỉ ghi log, không ảnh hưởng response.
-
-- `EMAIL_BACKEND=console` (mặc định): chỉ ghi log `[EMAIL console] user_id=... task_id=... subject=...` (không ghi địa chỉ email vào log).
-- `EMAIL_BACKEND=smtp`: gửi thật qua `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` (chạy trong thread, không chặn event loop).
-
-### Chạy test với Redis thật (tuỳ chọn)
-Test thường dùng `fakeredis` (không cần cài gì). Muốn kiểm tra với Redis thật:
-```bash
-TEST_REDIS_URL=redis://localhost:6379/15 pytest tests/test_redis_integration.py   # PowerShell: $env:TEST_REDIS_URL = "..."
+alembic revision --autogenerate -m "mô tả"   # Sinh migration mới từ thay đổi model
+alembic upgrade head                          # Nâng cấp DB lên phiên bản mới nhất
+alembic downgrade -1                          # Lùi 1 bước migration
+alembic check                                 # Kiểm tra model và DB có khớp nhau không
 ```
 
-## Lint & format (ruff)
+### Chạy bộ Test (Unit + Integration + Docker + OpenAPI + E2E)
 ```bash
-ruff format .          # định dạng (indent 4 space, quote kép, 100 cột)
-ruff check .           # lint (import, bugbear, cấm print...)
-ruff check --fix .     # tự sửa phần sửa được
+pytest -q
 ```
-Chạy cả hai lệnh trước mỗi commit. Cấu hình ở `pyproject.toml`, `.editorconfig` giữ indent thống nhất.
 
-## Quy ước (rút ra từ review)
-- PATCH: `exclude_unset` không loại `null` gửi tường minh -> field NOT NULL phải chặn null trong `*Update`.
-- Service raise `NotFoundException` (`core/exceptions.py`), message nằm trong `core/constants.py`.
-- Schema đầu vào kế thừa `BaseSchema` (tự cắt khoảng trắng đầu/cuối).
+### Kiểm tra Code Quality (Ruff & Mypy 100%)
+```bash
+ruff check app tests          # Lint 0 lỗi, 0 cảnh báo
+ruff format --check app tests # Kiểm tra định dạng chuẩn
+mypy app tests                # Kiểm tra kiểu tĩnh 0 lỗi
+```

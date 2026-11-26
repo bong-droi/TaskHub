@@ -1,3 +1,5 @@
+from typing import Any
+
 import jwt
 from sqlalchemy.exc import IntegrityError
 
@@ -77,7 +79,7 @@ class AuthService:
         await self.tokens.revoke_if_active(payload["jti"])
 
     @staticmethod
-    def _decode_refresh(token: str) -> dict:
+    def _decode_refresh(token: str) -> dict[str, Any]:
         try:
             return decode_token(token, TokenType.REFRESH)
         except jwt.InvalidTokenError:

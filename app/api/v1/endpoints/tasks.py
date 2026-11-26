@@ -11,7 +11,12 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 @router.get("", response_model=Page[TaskRead], summary="Task tôi được phép xem (phân trang)")
 async def list_tasks(user: CurrentUser, service: TaskServiceDep, page: PaginationDep):
     items, total = await service.list_tasks(user, page.skip, page.limit)
-    return Page[TaskRead](items=items, total=total, page=page.page, limit=page.limit)
+    return Page[TaskRead].create(
+        items=[TaskRead.model_validate(item) for item in items],
+        total=total,
+        page=page.page,
+        limit=page.limit,
+    )
 
 
 @router.post(
