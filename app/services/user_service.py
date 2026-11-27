@@ -18,7 +18,7 @@ class UserService:
     async def change_password(self, user: User, payload: PasswordChange) -> None:
         if not await verify_password_async(payload.current_password, user.hashed_password):
             raise BadRequestException(WRONG_CURRENT_PASSWORD)
-        new_hash = await hash_password_async(payload.new_password)
-        await self.users.update(user, {"hashed_password": new_hash})
-        # Đăng xuất mọi thiết bị: refresh token cũ không dùng được nữa
+        user.hashed_password = await hash_password_async(payload.new_password)
+        self.users.session.add(user)
+        # Gom cập nhật mật khẩu + thu hồi mọi refresh token vào 1 transaction (1 lần commit)
         await self.tokens.revoke_all_for_user(user.id)

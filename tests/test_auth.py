@@ -104,10 +104,22 @@ async def test_refresh_token_cannot_be_used_as_access_token(anon):
     assert (await anon.get(ME, headers=bearer(tokens["refresh_token"]))).status_code == 401
 
 
-async def test_refresh_rotates_tokens(anon):
+async def test_refresh_rotates_tokens(anon, monkeypatch):
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     old = (await login(anon)).json()
+    commits = 0
+    orig_commit = AsyncSession.commit
+
+    async def counting_commit(self):
+        nonlocal commits
+        commits += 1
+        return await orig_commit(self)
+
+    monkeypatch.setattr(AsyncSession, "commit", counting_commit)
     r = await anon.post(f"{AUTH}/refresh", json={"refresh_token": old["refresh_token"]})
     assert r.status_code == 200
+    assert commits == 1  # revoke token cũ + tạo token mới trong 1 transaction duy nhất
     new = r.json()
     assert new["refresh_token"] != old["refresh_token"]
     assert (await anon.get(ME, headers=bearer(new["access_token"]))).status_code == 200

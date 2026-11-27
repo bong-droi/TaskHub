@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import select, update
@@ -32,6 +33,23 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
         )
         await self.session.commit()
         return (result.rowcount or 0) == 1
+
+    async def rotate(self, old_jti: str, new_jti: str, user_id: int, expires_at: datetime) -> bool:
+        """Thu hồi token cũ (WHERE revoked IS FALSE) và tạo token mới trong CÙNG 1 transaction."""
+        result = cast(
+            CursorResult[Any],
+            await self.session.execute(
+                update(RefreshToken)
+                .where(RefreshToken.jti == old_jti, RefreshToken.revoked.is_(False))
+                .values(revoked=True)
+            ),
+        )
+        if (result.rowcount or 0) != 1:
+            await self.session.rollback()
+            return False
+        self.session.add(RefreshToken(jti=new_jti, user_id=user_id, expires_at=expires_at))
+        await self.session.commit()
+        return True
 
     async def revoke_all_for_user(self, user_id: int) -> None:
         await self.session.execute(
