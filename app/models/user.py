@@ -1,13 +1,8 @@
-from typing import TYPE_CHECKING
-
 from sqlalchemy import Boolean, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedAtMixin
 from app.models.enums import UserRole
-
-if TYPE_CHECKING:
-    from app.models.workspace import Workspace, WorkspaceMember
 
 
 class User(CreatedAtMixin, Base):
@@ -22,7 +17,7 @@ class User(CreatedAtMixin, Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    owned_workspaces: Mapped[list["Workspace"]] = relationship(back_populates="owner")
-    memberships: Mapped[list["WorkspaceMember"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    owned_workspaces: Mapped[list["Workspace"]] = relationship(back_populates="owner")  # noqa: F821
+    memberships: Mapped[list["WorkspaceMember"]] = relationship(  # noqa: F821
+        back_populates="user", cascade="all, delete-orphan"
     )

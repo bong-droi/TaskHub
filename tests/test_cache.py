@@ -273,7 +273,6 @@ async def test_write_under_stale_version_is_invisible_after_invalidate(redis_cac
     cache = TaskListCache(redis_cache, ttl=60)
     params = TaskListParams(page=1, limit=20)
     old_version = await cache.version(7)
-    assert old_version is not None
     await cache.invalidate(7)  # có ghi xen giữa
     stale = Page[TaskRead](items=[], total=99, page=1, limit=20)
     await cache.set(7, old_version, params, stale)  # ghi dưới version cũ

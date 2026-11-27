@@ -1,14 +1,8 @@
-"""Băm mật khẩu (bcrypt) và tạo/giải mã JWT (PyJWT).
-
-Hỗ trợ cả hàm đồng bộ (`hash_password`, `verify_password`) lẫn bất đồng bộ chạy trên threadpool
-(`hash_password_async`, `verify_password_async` dùng `run_in_threadpool`) để không làm nghẽn
-Event Loop của FastAPI.
-"""
+"""Băm mật khẩu (bcrypt) và tạo/giải mã JWT (PyJWT)."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any
 
 import bcrypt
 import jwt
@@ -34,12 +28,12 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 async def hash_password_async(password: str) -> str:
-    """Chạy bcrypt.hashpw trong threadpool để không block Event Loop."""
+    """Chạy bcrypt trong thread pool để không chặn event loop khi đăng ký/đổi mật khẩu."""
     return await run_in_threadpool(hash_password, password)
 
 
 async def verify_password_async(password: str, hashed: str) -> bool:
-    """Chạy bcrypt.checkpw trong threadpool để không block Event Loop."""
+    """Chạy bcrypt trong thread pool để không chặn event loop khi đăng nhập."""
     return await run_in_threadpool(verify_password, password, hashed)
 
 
@@ -51,13 +45,7 @@ def _encode(sub: str, token_type: TokenType, expires_delta: timedelta) -> tuple[
     now = datetime.now(UTC)
     jti = uuid.uuid4().hex
     exp = now + expires_delta
-    payload: dict[str, Any] = {
-        "sub": sub,
-        "type": token_type.value,
-        "jti": jti,
-        "iat": now,
-        "exp": exp,
-    }
+    payload = {"sub": sub, "type": token_type.value, "jti": jti, "iat": now, "exp": exp}
     return (
         jwt.encode(payload, settings.SECRET_KEY.get_secret_value(), algorithm=ALGORITHM),
         jti,
@@ -75,9 +63,9 @@ def create_refresh_token(sub: str) -> tuple[str, str, datetime]:
     return _encode(sub, TokenType.REFRESH, timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
 
 
-def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:
+def decode_token(token: str, expected_type: TokenType) -> dict:
     """Raise jwt.InvalidTokenError nếu token sai chữ ký, hết hạn hoặc sai loại."""
-    payload: dict[str, Any] = jwt.decode(
+    payload = jwt.decode(
         token,
         settings.SECRET_KEY.get_secret_value(),
         algorithms=[ALGORITHM],  # luôn chỉ định algorithms

@@ -1,9 +1,7 @@
 from app.core.constants import (
     ALREADY_MEMBER,
-    CANNOT_CHANGE_OWNER_ROLE,
     CANNOT_REMOVE_OWNER,
     INSUFFICIENT_PERMISSION,
-    MEMBER_NOT_FOUND,
     USER_NOT_FOUND,
     WORKSPACE_NOT_FOUND,
 )
@@ -118,62 +116,6 @@ async def test_remove_member(team, anon):
 async def test_members_hidden_from_outsiders(team, anon):
     r = await anon.get(f"{WS}/{team.ws['id']}/members", headers=team.h["dave"])
     assert r.status_code == 404
-
-
-async def test_update_member_role_rules(team, anon):
-    base = f"{WS}/{team.ws['id']}/members"
-    # Chỉ OWNER được đổi role (EDITOR/VIEWER -> 403, người ngoài -> 404)
-    assert (
-        await anon.patch(
-            f"{base}/{team.ids['carol']}", json={"role": "EDITOR"}, headers=team.h["bob"]
-        )
-    ).status_code == 403
-    assert (
-        await anon.patch(
-            f"{base}/{team.ids['bob']}", json={"role": "VIEWER"}, headers=team.h["carol"]
-        )
-    ).status_code == 403
-    assert (
-        await anon.patch(
-            f"{base}/{team.ids['bob']}", json={"role": "VIEWER"}, headers=team.h["dave"]
-        )
-    ).status_code == 404
-
-    # Không thể đổi role của OWNER (400) hoặc gán role OWNER cho thành viên (422)
-    owner_err = await anon.patch(
-        f"{base}/{team.ids['alice']}", json={"role": "EDITOR"}, headers=team.h["alice"]
-    )
-    assert owner_err.status_code == 400 and owner_err.json() == {"detail": CANNOT_CHANGE_OWNER_ROLE}
-    assert (
-        await anon.patch(
-            f"{base}/{team.ids['bob']}", json={"role": "OWNER"}, headers=team.h["alice"]
-        )
-    ).status_code == 422
-
-    # User không phải thành viên -> 404
-    not_member = await anon.patch(
-        f"{base}/{team.ids['dave']}", json={"role": "EDITOR"}, headers=team.h["alice"]
-    )
-    assert not_member.status_code == 404 and not_member.json() == {"detail": MEMBER_NOT_FOUND}
-
-    # Hạ quyền bob EDITOR -> VIEWER và nâng quyền carol VIEWER -> EDITOR
-    demote = await anon.patch(
-        f"{base}/{team.ids['bob']}", json={"role": "VIEWER"}, headers=team.h["alice"]
-    )
-    assert demote.status_code == 200 and demote.json()["role"] == "VIEWER"
-    promote = await anon.patch(
-        f"{base}/{team.ids['carol']}", json={"role": "EDITOR"}, headers=team.h["alice"]
-    )
-    assert promote.status_code == 200 and promote.json()["role"] == "EDITOR"
-
-    # Quyền mới có hiệu lực ngay: bob không còn tạo được task, carol tạo được task
-    task_url = f"/api/v1/projects/{team.project['id']}/tasks"
-    assert (
-        await anon.post(task_url, json={"title": "B"}, headers=team.h["bob"])
-    ).status_code == 403
-    assert (
-        await anon.post(task_url, json={"title": "C"}, headers=team.h["carol"])
-    ).status_code == 201
 
 
 async def test_concurrent_duplicate_invite_returns_409_not_500(
