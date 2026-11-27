@@ -1,0 +1,38 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [main, "feature/day-*"]
+  pull_request:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare .env for Docker Compose
+        run: |
+          cp .env.example .env
+          echo "SECRET_KEY=ci-only-secret-key-at-least-32-characters-long" >> .env
+          echo "POSTGRES_PASSWORD=ci_strong_pg_password" >> .env
+
+      - name: Validate docker-compose.yml
+        run: docker compose config -q
+
+      - name: Build Docker image
+        run: docker build -t taskhub:ci .
+
+      - name: Start stack and verify health + production docs disabled
+        run: |
+          docker compose up -d --build --wait
+          curl -fsS http://127.0.0.1:8000/api/v1/health | grep -q '"status":"ok"'
+          # Production mode: /docs, /redoc, /openapi.json must return 404
+          for path in /docs /redoc /openapi.json; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8000${path}")
+            test "$code" -eq 404
+          done
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v
