@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy import Column, Date, Enum, ForeignKey, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants import TITLE_MAX_LENGTH
 from app.db.base import Base, CreatedAtMixin
 from app.models.enums import TaskPriority, TaskStatus
 
@@ -25,9 +26,8 @@ class Task(CreatedAtMixin, Base):
     assignee_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
-    # nullable tạm thời: Ngày 3 (Auth) sẽ gán từ current_user
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    title: Mapped[str] = mapped_column(String(200))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    title: Mapped[str] = mapped_column(String(TITLE_MAX_LENGTH))
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus, native_enum=False, length=20), default=TaskStatus.TODO, index=True

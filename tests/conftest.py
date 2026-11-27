@@ -1,4 +1,8 @@
+import os
 from types import SimpleNamespace
+
+# SECRET_KEY bắt buộc (không có default) -> đặt khoá riêng cho bộ test trước khi import app
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-minimum-32-characters")
 
 import pytest
 from fakeredis import FakeAsyncRedis

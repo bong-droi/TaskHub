@@ -24,7 +24,11 @@ def build_assignment_email(
         "TaskHub"
     )
     return Email(
-        to=assignee.email, subject=f"[TaskHub] Bạn được giao task: {task.title}", body=body
+        to=assignee.email,
+        subject=f"[TaskHub] Bạn được giao task: {task.title}",
+        body=body,
+        task_id=task.id,
+        recipient_user_id=assignee.id,
     )
 
 
@@ -47,4 +51,9 @@ class Notifier:
         try:
             await self.backend.send(message)
         except Exception:
-            logger.exception("Gửi email thất bại: to=%s subject=%s", message.to, message.subject)
+            logger.exception(
+                "Gửi email thất bại: user_id=%s task_id=%s subject=%s",
+                message.recipient_user_id,
+                message.task_id,
+                message.subject,
+            )

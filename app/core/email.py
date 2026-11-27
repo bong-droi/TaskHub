@@ -19,6 +19,8 @@ class Email:
     to: str
     subject: str
     body: str
+    task_id: int | None = None
+    recipient_user_id: int | None = None
 
 
 class EmailBackend(Protocol):
@@ -29,7 +31,12 @@ class ConsoleEmailBackend:
     """Không gửi thật, chỉ ghi log. Mặc định cho dev và test."""
 
     async def send(self, message: Email) -> None:
-        logger.info("[EMAIL console] to=%s subject=%s", message.to, message.subject)
+        logger.info(
+            "[EMAIL console] user_id=%s task_id=%s subject=%s",
+            message.recipient_user_id,
+            message.task_id,
+            message.subject,
+        )
 
 
 class SmtpEmailBackend:

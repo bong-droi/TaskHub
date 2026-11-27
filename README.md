@@ -14,10 +14,10 @@ Sample app xây dần theo từng ngày. Kiến trúc: **Router → Service → 
 ## Chạy nhanh (SQLite)
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env            # tuỳ chọn; mặc định chạy được ngay với SQLite
-alembic upgrade head            # tạo bảng
-python -m scripts.seed          # dữ liệu mẫu (project_id=1)
+pip install -r requirements-dev.txt  # production chỉ cần: pip install -r requirements.txt
+cp .env.example .env                 # BẮT BUỘC đặt SECRET_KEY (>= 32 ký tự) trong .env hoặc env
+alembic upgrade head                 # tạo bảng
+python -m scripts.seed               # dữ liệu mẫu
 uvicorn app.main:app --reload
 ```
 Swagger: http://127.0.0.1:8000/docs
@@ -87,7 +87,7 @@ tests/                       # API tests + model/cascade tests
 ## Ghi chú thiết kế
 - `expire_on_commit=False` để object vẫn đọc được sau commit khi dùng async.
 - SQLite cần bật `PRAGMA foreign_keys=ON` (đã làm trong `db/session.py`).
-- `tasks.created_by` đang nullable; Ngày 3 (Auth) sẽ gán từ `current_user`.
+- `tasks.created_by` là NOT NULL và có index, luôn gán từ `current_user`.
 - Repository tự `commit`; có thể nâng cấp lên Unit of Work nếu cần transaction đa repo.
 
 ## Phân quyền RBAC (Ngày 4)
@@ -195,7 +195,7 @@ Response có header **`X-Cache: HIT | MISS | BYPASS`** (BYPASS = cache tắt) đ
 ### Email khi được giao task
 Giao task cho **người khác** (lúc tạo, hoặc `PATCH assignee_id` sang người mới) thì gửi email cho người được giao, chạy nền bằng `BackgroundTasks` (response trả về trước). Không gửi khi tự giao cho mình, khi giao lại đúng người cũ, hoặc khi request thất bại. Lỗi gửi email chỉ ghi log, không ảnh hưởng response.
 
-- `EMAIL_BACKEND=console` (mặc định): chỉ ghi log `[EMAIL console] to=... subject=...`.
+- `EMAIL_BACKEND=console` (mặc định): chỉ ghi log `[EMAIL console] user_id=... task_id=... subject=...` (không ghi địa chỉ email vào log).
 - `EMAIL_BACKEND=smtp`: gửi thật qua `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` (chạy trong thread, không chặn event loop).
 
 ### Chạy test với Redis thật (tuỳ chọn)

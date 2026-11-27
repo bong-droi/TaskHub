@@ -231,12 +231,39 @@ async def test_redis_outage_never_breaks_the_api(team, anon, caplog):
     assert created.status_code == 201  # ghi OK dù không vô hiệu hoá được cache
     r = await _list(anon, team)
     assert r.status_code == 200 and _titles(r) == ["vẫn tạo được"]
-    assert _cache(r) == "MISS"  # chạy thẳng bằng DB
+    assert _cache(r) == "BYPASS"  # lỗi đọc version -> bỏ qua cache, không báo MISS sai
     patched = await anon.patch(
         f"{TASKS}/{created.json()['id']}", json={"status": "DONE"}, headers=team.h["alice"]
     )
     assert patched.status_code == 200
     assert any("Cache" in m for m in caplog.messages)  # có ghi cảnh báo để vận hành biết
+
+
+async def test_flaky_redis_version_error_bypasses_and_never_reads_stale_v0(
+    redis_cache, team, anon, monkeypatch
+):
+    """Redis chập chờn: khi có entry v0 cũ, rồi có ghi (version tăng lên 1), sau đó đọc version
+    lỗi -> phải BYPASS (đọc DB mới nhất), KHÔNG được quay về đọc/ghi dưới key v0 cũ."""
+    from app.core.cache import RedisCache
+
+    await _list(anon, team)  # lưu danh sách rỗng dưới key v0
+    await _mk(anon, team, "t-mới")  # invalidate -> version = 1
+
+    orig_get = RedisCache.get
+    calls: list[str] = []
+
+    async def flaky_get(self, key: str):
+        calls.append(key)
+        if key.startswith("tasks:ver:"):
+            raise ConnectionError("redis blip on version")
+        return await orig_get(self, key)
+
+    monkeypatch.setattr(RedisCache, "get", flaky_get)
+    r = await _list(anon, team)
+    assert r.status_code == 200
+    assert _cache(r) == "BYPASS"
+    assert _titles(r) == ["t-mới"]
+    assert all(k.startswith("tasks:ver:") for k in calls)  # tuyệt đối không đụng key dữ liệu v0
 
 
 # ------------------------------------------------------------------ TaskListCache (đơn vị)

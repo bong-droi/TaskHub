@@ -13,13 +13,15 @@ from typing import Literal, Self
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.constants import VERSION_TTL_SECONDS
+
 # Hằng số của ứng dụng (không đổi theo môi trường)
 APP_NAME = "TaskHub"
 APP_VERSION = "0.6.0"
 API_PREFIX = "/api/v1"
 ALGORITHM = "HS256"
 
-DEV_SECRET_KEY = "change-me-dev-only-secret-key-32chars-min"
+EXAMPLE_SECRET_KEY = "change-me-dev-only-secret-key-32chars-min"
 MIN_SECRET_KEY_LENGTH = 32  # HS256 cần khoá tối thiểu 256 bit
 MIN_PRODUCTION_BCRYPT_ROUNDS = 10
 # Engine là async nên bắt buộc dùng driver async (vd "sqlite://" thường sẽ lỗi lúc chạy)
@@ -43,14 +45,14 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./taskhub.db"
 
     # --- Auth ---
-    SECRET_KEY: SecretStr = SecretStr(DEV_SECRET_KEY)  # SecretStr: không lộ khi print/log
+    SECRET_KEY: SecretStr  # bắt buộc phải đặt (không có default; dev lấy từ .env)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, gt=0)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, gt=0)
     BCRYPT_ROUNDS: int = Field(default=12, ge=4, le=16)
 
     # --- Cache (Redis). Để trống = tắt cache ---
     REDIS_URL: str = ""
-    CACHE_TTL_SECONDS: int = Field(default=60, gt=0)
+    CACHE_TTL_SECONDS: int = Field(default=60, gt=0, le=VERSION_TTL_SECONDS)
 
     # --- Email ---
     EMAIL_BACKEND: Literal["console", "smtp"] = "console"  # console: chỉ ghi log (dev/test)
@@ -91,13 +93,23 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_environment_rules(self) -> Self:
+        os_app_env = os.getenv("APP_ENV", "development")
+        if self.APP_ENV != os_app_env:
+            raise ValueError(
+                f"APP_ENV={self.APP_ENV!r} không khớp với biến môi trường hệ điều hành "
+                f"APP_ENV={os_app_env!r}. Phải đặt APP_ENV bằng biến môi trường thật "
+                "(không đặt trong file .env)."
+            )
         if self.EMAIL_BACKEND == "smtp" and not self.SMTP_HOST:
             raise ValueError("EMAIL_BACKEND=smtp yêu cầu phải đặt SMTP_HOST")
+        if self.SMTP_USER and not self.SMTP_STARTTLS:
+            raise ValueError(
+                "Không cho phép SMTP_STARTTLS=false khi đã cấu hình SMTP_USER "
+                "(tránh gửi mật khẩu dạng plaintext)"
+            )
         if self.APP_ENV == "production":
-            if self.SECRET_KEY.get_secret_value() == DEV_SECRET_KEY:
-                raise ValueError(
-                    "Production không được dùng SECRET_KEY mặc định của môi trường dev"
-                )
+            if self.SECRET_KEY.get_secret_value() == EXAMPLE_SECRET_KEY:
+                raise ValueError("Production không được dùng SECRET_KEY mẫu trong .env.example")
             if self.BCRYPT_ROUNDS < MIN_PRODUCTION_BCRYPT_ROUNDS:
                 raise ValueError(f"Production cần BCRYPT_ROUNDS >= {MIN_PRODUCTION_BCRYPT_ROUNDS}")
         return self

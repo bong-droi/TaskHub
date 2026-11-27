@@ -5,13 +5,20 @@ from app.core import email as email_module
 from app.core.config import settings
 from app.core.email import ConsoleEmailBackend, Email, SmtpEmailBackend, get_email_backend
 
-MSG = Email(to="bob@t.dev", subject="Chủ đề", body="Nội dung tiếng Việt")
+MSG = Email(
+    to="bob@t.dev",
+    subject="Chủ đề",
+    body="Nội dung tiếng Việt",
+    task_id=10,
+    recipient_user_id=2,
+)
 
 
-async def test_console_backend_only_logs(caplog):
+async def test_console_backend_only_logs_without_pii(caplog):
     caplog.set_level(logging.INFO, logger="taskhub.email")
     await ConsoleEmailBackend().send(MSG)
-    assert any("bob@t.dev" in m and "Chủ đề" in m for m in caplog.messages)
+    assert any("user_id=2" in m and "task_id=10" in m and "Chủ đề" in m for m in caplog.messages)
+    assert all("bob@t.dev" not in m for m in caplog.messages)  # không ghi email (PII) vào log
 
 
 class FakeSMTP:

@@ -20,15 +20,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.core.cache import CacheBackend
+from app.core.constants import VERSION_TTL_SECONDS
 from app.models.enums import TaskPriority, TaskStatus
 from app.schemas.common import Page
 from app.schemas.task import TaskRead
 
 logger = logging.getLogger("taskhub.cache")
-
-# Key version phải sống lâu hơn mọi key dữ liệu của nó (nếu version hết hạn rồi reset về 0 thì
-# key dữ liệu cũ có thể "sống lại"). Key dữ liệu sống tối đa CACHE_TTL_SECONDS (mặc định 60s).
-VERSION_TTL_SECONDS = 24 * 60 * 60
 
 CacheStatus = Literal["HIT", "MISS", "BYPASS"]
 
@@ -80,13 +77,13 @@ class TaskListCache:
     def _data_key(project_id: int, version: int, params: TaskListParams) -> str:
         return f"tasks:p{project_id}:v{version}:{params.key_part}"
 
-    async def version(self, project_id: int) -> int:
+    async def version(self, project_id: int) -> int | None:
         try:
             raw = await self.backend.get(self._version_key(project_id))
             return int(raw) if raw else 0
         except Exception:
             logger.warning("Cache: đọc version lỗi, bỏ qua cache", exc_info=True)
-            return 0
+            return None
 
     async def get(
         self, project_id: int, version: int, params: TaskListParams

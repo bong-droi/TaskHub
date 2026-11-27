@@ -82,8 +82,15 @@ async def test_email_failure_never_breaks_the_request(team, anon, outbox, caplog
     caplog.set_level(logging.ERROR, logger="taskhub.notifier")
     r = await _create(anon, team, assignee_id=team.ids["bob"])
     assert r.status_code == 201 and r.json()["assignee_id"] == team.ids["bob"]  # task vẫn được tạo
-    assert any("Gửi email thất bại" in m and "bob@t.dev" in m for m in caplog.messages)
-    got = await anon.get(f"{TASKS}/{r.json()['id']}", headers=team.h["alice"])
+    task_id = r.json()["id"]
+    assert any(
+        "Gửi email thất bại" in m
+        and f"user_id={team.ids['bob']}" in m
+        and f"task_id={task_id}" in m
+        for m in caplog.messages
+    )
+    assert all("bob@t.dev" not in m for m in caplog.messages)  # không lộ email (PII) trong log lỗi
+    got = await anon.get(f"{TASKS}/{task_id}", headers=team.h["alice"])
     assert got.status_code == 200
 
 

@@ -5,7 +5,7 @@ import logging
 
 from sqlalchemy import select
 
-from app.core.security import hash_password
+from app.core.security import hash_password_async
 from app.db.session import SessionLocal, engine
 from app.models import Project, User, Workspace, WorkspaceMember
 from app.models.enums import UserRole, WorkspaceRole
@@ -21,24 +21,30 @@ async def main() -> None:
         user = await db.scalar(select(User).where(User.email == ADMIN_EMAIL))
         if user is not None:
             if user.hashed_password == "placeholder":  # dữ liệu seed từ Ngày 2
-                user.hashed_password = hash_password(ADMIN_PASSWORD)
+                user.hashed_password = await hash_password_async(ADMIN_PASSWORD)
                 await db.commit()
-                logger.info(f"Đã cập nhật mật khẩu admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
+                logger.info("Đã cập nhật mật khẩu tài khoản admin (user_id=%s).", user.id)
             else:
                 logger.info("Đã có dữ liệu mẫu, bỏ qua.")
         else:
             user = User(
                 email=ADMIN_EMAIL,
                 full_name="Admin",
-                hashed_password=hash_password(ADMIN_PASSWORD),
+                hashed_password=await hash_password_async(ADMIN_PASSWORD),
                 role=UserRole.ADMIN,
             )
             ws = Workspace(name="Demo Workspace", owner=user)
             ws.members.append(WorkspaceMember(user=user, role=WorkspaceRole.OWNER))
-            ws.projects.append(Project(name="Demo Project", description="Project mẫu"))
+            project = Project(name="Demo Project", description="Project mẫu")
+            ws.projects.append(project)
             db.add_all([user, ws])
             await db.commit()
-            logger.info(f"Seed xong: {ADMIN_EMAIL} / {ADMIN_PASSWORD}, project_id=1")
+            logger.info(
+                "Seed xong: user_id=%s, workspace_id=%s, project_id=%s",
+                user.id,
+                ws.id,
+                project.id,
+            )
     await engine.dispose()
 
 

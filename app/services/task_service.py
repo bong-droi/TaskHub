@@ -76,6 +76,8 @@ class TaskService:
             return TaskListResult(await self._query_page(project_id, params), "BYPASS")
         # 2) Đọc version TRƯỚC khi query DB (xem giải thích ở services/task_cache.py)
         version = await self.cache.version(project_id)
+        if version is None:
+            return TaskListResult(await self._query_page(project_id, params), "BYPASS")
         cached = await self.cache.get(project_id, version, params)
         if cached is not None:
             return TaskListResult(cached, "HIT")

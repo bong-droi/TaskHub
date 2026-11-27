@@ -17,7 +17,7 @@ from app.core.constants import (
 )
 from app.core.email import EmailBackend, get_email_backend
 from app.core.exceptions import UnauthorizedException
-from app.core.security import ACCESS, decode_token
+from app.core.security import TokenType, decode_token
 from app.db.session import get_db
 from app.models import User
 from app.repositories.comment_repository import CommentRepository
@@ -121,7 +121,7 @@ def get_user_service(db: DbSession) -> UserService:
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: DbSession) -> User:
     try:
-        payload = decode_token(token, ACCESS)  # refresh token KHÔNG dùng được ở đây
+        payload = decode_token(token, TokenType.ACCESS)  # refresh token KHÔNG dùng được ở đây
         user_id = int(payload["sub"])
     except (jwt.InvalidTokenError, ValueError):
         raise UnauthorizedException(INVALID_ACCESS_TOKEN) from None
