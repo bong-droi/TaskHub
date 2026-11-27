@@ -31,7 +31,10 @@ def test_crud_flow(client):
     assert r.json()["status"] == "DONE"
     assert r.json()["title"] == "Học FastAPI"  # exclude_unset: field khác giữ nguyên
 
-    assert len(client.get("/api/v1/tasks").json()) == 1
+    list_resp = client.get("/api/v1/tasks").json()
+    assert list_resp["total"] == 1
+    assert len(list_resp["items"]) == 1
+
     assert client.delete(f"/api/v1/tasks/{task['id']}").status_code == 204
     assert client.get(f"/api/v1/tasks/{task['id']}").status_code == 404
 
@@ -42,3 +45,12 @@ def test_validation_errors(client):
     r = client.post("/api/v1/tasks", json={"title": "x", "due_date": past})
     assert r.status_code == 422
     assert client.get("/api/v1/tasks?limit=1000").status_code == 422
+
+
+def test_patch_due_date_in_past_rejected(client):
+    r = client.post("/api/v1/tasks", json={"title": "Test task"})
+    assert r.status_code == 201
+    task_id = r.json()["id"]
+    past = (date.today() - timedelta(days=1)).isoformat()
+    r = client.patch(f"/api/v1/tasks/{task_id}", json={"due_date": past})
+    assert r.status_code == 422

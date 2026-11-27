@@ -1,21 +1,15 @@
 from datetime import date, datetime
-from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-class TaskStatus(str, Enum):
-    TODO = "TODO"
-    IN_PROGRESS = "IN_PROGRESS"
-    IN_REVIEW = "IN_REVIEW"
-    DONE = "DONE"
+from app.core.messages import DUE_DATE_IN_PAST, FIELD_CANNOT_BE_NULL
+from app.schemas.enums import TaskPriority, TaskStatus
 
 
-class TaskPriority(str, Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
-    URGENT = "URGENT"
+def _validate_due_date(v: date | None) -> date | None:
+    if v is not None and v < date.today():
+        raise ValueError(DUE_DATE_IN_PAST)
+    return v
 
 
 class TaskBase(BaseModel):
@@ -29,19 +23,29 @@ class TaskCreate(TaskBase):
     @field_validator("due_date")
     @classmethod
     def due_date_not_in_past(cls, v: date | None) -> date | None:
-        if v is not None and v < date.today():
-            raise ValueError("due_date không được ở quá khứ")
+        return _validate_due_date(v)
+
+    @field_validator("title", "description", mode="before")
+    @classmethod
+    def required_fields_cannot_be_null(cls, v: object) -> object:
+        if v is None:
+            raise ValueError(FIELD_CANNOT_BE_NULL)
         return v
 
 
 class TaskUpdate(BaseModel):
-    """Dùng cho PATCH: mọi field đều optional."""
+    """Dùng cho PATCH: mỗi field đều optional."""
 
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
     due_date: date | None = None
+
+    @field_validator("due_date")
+    @classmethod
+    def due_date_not_in_past(cls, v: date | None) -> date | None:
+        return _validate_due_date(v)
 
 
 class TaskRead(TaskBase):
