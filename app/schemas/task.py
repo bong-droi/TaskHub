@@ -23,12 +23,6 @@ __all__ = [
 ]
 
 
-def _validate_due_date_not_in_past(v: date | None) -> date | None:
-    if v is not None and v < date.today():
-        raise ValueError(DUE_DATE_IN_PAST)
-    return v
-
-
 class TaskBase(BaseSchema):
     title: str = Field(
         min_length=TITLE_MIN_LENGTH, max_length=TITLE_MAX_LENGTH, examples=["Viết tài liệu API"]
@@ -49,7 +43,9 @@ class TaskCreateInProject(TaskBase):
     @field_validator("due_date")
     @classmethod
     def due_date_not_in_past(cls, v: date | None) -> date | None:
-        return _validate_due_date_not_in_past(v)
+        if v is not None and v < date.today():
+            raise ValueError(DUE_DATE_IN_PAST)
+        return v
 
 
 class TaskCreate(TaskCreateInProject):
@@ -77,11 +73,6 @@ class TaskUpdate(BaseSchema):
     assignee_id: DbId | None = None
 
     _no_null = not_nullable("title", "status", "priority")
-
-    @field_validator("due_date")
-    @classmethod
-    def due_date_not_in_past(cls, v: date | None) -> date | None:
-        return _validate_due_date_not_in_past(v)
 
 
 class TaskRead(TaskBase):

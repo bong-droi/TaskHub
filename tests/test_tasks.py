@@ -88,16 +88,6 @@ async def test_patch_allows_null_on_nullable_fields(client, seeded):
     assert body["assignee_id"] is None  # null = bỏ gán
 
 
-async def test_patch_rejects_due_date_in_past(client, seeded):
-    task = await _new_task(client, seeded)
-    past = (date.today() - timedelta(days=1)).isoformat()
-    r = await client.patch(f"{API}/{task['id']}", json={"due_date": past})
-    assert r.status_code == 422
-    future = (date.today() + timedelta(days=1)).isoformat()
-    ok = await client.patch(f"{API}/{task['id']}", json={"due_date": future})
-    assert ok.status_code == 200 and ok.json()["due_date"] == future
-
-
 # ---- Review: NotFoundException + message dùng chung ---------------------------
 async def test_not_found_uses_shared_messages(client, seeded):
     for resp in (

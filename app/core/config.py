@@ -124,4 +124,4 @@ class Settings(BaseSettings):
         return self.APP_ENV == "production"
 
 
-settings = Settings()  # type: ignore[call-arg]  # nạp và kiểm tra ngay khi import
+settings = Settings()  # nạp và kiểm tra ngay khi import: sai cấu hình thì dừng ở đây

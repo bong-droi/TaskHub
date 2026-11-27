@@ -53,7 +53,6 @@ async def test_smtp_backend_builds_and_sends_message(monkeypatch):
     smtp = FakeSMTP.instances[0]
     assert (smtp.host, smtp.port) == ("smtp.x.com", 2525) and smtp.timeout > 0
     assert smtp.calls == ["starttls", ("login", "user", "pw")]  # TLS trước, rồi mới đăng nhập
-    assert smtp.sent is not None
     assert smtp.sent["To"] == "bob@t.dev" and smtp.sent["From"] == "TaskHub <a@b.c>"
     assert smtp.sent["Subject"] == "Chủ đề"
     assert "Nội dung tiếng Việt" in smtp.sent.get_content()

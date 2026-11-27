@@ -100,8 +100,6 @@ class ResourceAccess:
         if task is None:
             raise NotFoundException(TASK_NOT_FOUND)
         project = await self.projects.get(task.project_id)
-        if project is None:
-            raise NotFoundException(TASK_NOT_FOUND)
         role = await self.access.require(user, project.workspace_id, allowed, TASK_NOT_FOUND)
         return TaskContext(task, project, role)
 
@@ -112,8 +110,6 @@ class ResourceAccess:
         if label is None:
             raise NotFoundException(LABEL_NOT_FOUND)
         project = await self.projects.get(label.project_id)
-        if project is None:
-            raise NotFoundException(LABEL_NOT_FOUND)
         role = await self.access.require(user, project.workspace_id, allowed, LABEL_NOT_FOUND)
         return LabelContext(label, project, role)
 
@@ -124,11 +120,7 @@ class ResourceAccess:
         if comment is None:
             raise NotFoundException(COMMENT_NOT_FOUND)
         task = await self.tasks.get(comment.task_id)
-        if task is None:
-            raise NotFoundException(COMMENT_NOT_FOUND)
         project = await self.projects.get(task.project_id)
-        if project is None:
-            raise NotFoundException(COMMENT_NOT_FOUND)
         role = await self.access.require(user, project.workspace_id, allowed, COMMENT_NOT_FOUND)
         return CommentContext(comment, task, project, role)
 
