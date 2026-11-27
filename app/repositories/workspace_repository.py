@@ -15,22 +15,13 @@ class WorkspaceRepository(BaseRepository[Workspace]):
         """Tạo workspace và membership OWNER trong cùng một transaction (flush + commit)."""
         ws = Workspace(name=name, owner_id=owner_id)
         self.session.add(ws)
-        await self.flush()
+        await self.session.flush()
         self.session.add(
             WorkspaceMember(workspace_id=ws.id, user_id=owner_id, role=WorkspaceRole.OWNER)
         )
         await self.session.commit()
         await self.session.refresh(ws)
         return ws
-
-    async def get_by_id_with_details(self, workspace_id: int) -> Workspace | None:
-        """Nạp tường minh members + projects bằng selectinload khi cần lấy chi tiết."""
-        stmt = (
-            select(Workspace)
-            .where(Workspace.id == workspace_id)
-            .options(selectinload(Workspace.members), selectinload(Workspace.projects))
-        )
-        return await self.session.scalar(stmt)
 
     def _of_user(self, user_id: int) -> Select[Any]:
         return (

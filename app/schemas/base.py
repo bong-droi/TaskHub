@@ -29,6 +29,3 @@ def not_nullable(*fields: str) -> Any:
             _no_null = not_nullable("name")
     """
     return field_validator(*fields)(_reject_null)
-
-
-reject_explicit_nulls = not_nullable

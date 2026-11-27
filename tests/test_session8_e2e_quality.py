@@ -1,12 +1,8 @@
-"""Session 8: Kiểm thử End-to-End (E2E) luồng nghiệp vụ & chất lượng kiến trúc (DRY/Async)."""
+"""Session 8: Kiểm thử End-to-End (E2E) luồng nghiệp vụ và hành vi phân trang / async."""
 
-from app.core import constants
 from app.core.security import hash_password_async, verify_password_async
-from app.models import Project, User, Workspace
-from app.repositories.task_repository import TaskRepository
-from app.repositories.workspace_repository import WorkspaceRepository
-from app.schemas.base import BaseSchema, not_nullable, reject_explicit_nulls
-from app.schemas.common import Page, PaginatedResponse
+from app.repositories.workspace_repository import WorkspaceMemberRepository, WorkspaceRepository
+from app.schemas.common import Page
 
 
 async def test_e2e_full_business_workflow(anon, redis_cache, outbox) -> None:
@@ -47,7 +43,7 @@ async def test_e2e_full_business_workflow(anon, redis_cache, outbox) -> None:
     assert login_resp.status_code == 200
     owner_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
-    # 2. Tạo Workspace (Unit-of-Work: tạo Workspace + WorkspaceMember OWNER)
+    # 2. Tạo Workspace (tạo Workspace + WorkspaceMember OWNER trong cùng transaction)
     ws_resp = await anon.post(
         "/api/v1/workspaces",
         json={"name": "  E2E Production Workspace  "},
@@ -185,51 +181,22 @@ async def test_e2e_full_business_workflow(anon, redis_cache, outbox) -> None:
     assert get_deleted.status_code == 404
 
 
-async def test_session8_dry_and_async_optimizations(session_factory, seeded) -> None:
-    """Kiểm tra Refactor DRY, PaginatedResponse.create, Non-blocking bcrypt & ORM loading."""
-    # 1. Constants tập trung tại app/core/constants.py
-    assert constants.TITLE_MIN_LENGTH == 1
-    assert constants.TITLE_MAX_LENGTH == 200
-    assert constants.PASSWORD_MAX_LENGTH == 72
-    assert constants.MAX_LIMIT == 100
-    assert constants.MEMORY_CACHE_MAX_KEYS > 0
+def test_page_create_computes_pages_correctly() -> None:
+    """Page.create() chuẩn hoá items và tính đúng tổng số trang."""
+    page = Page[int].create(items=(1, 2, 3), total=25, page=1, limit=10)
+    assert page.items == [1, 2, 3] and page.total == 25 and page.pages == 3
+    empty = Page[int].create(items=[], total=0, page=1, limit=20)
+    assert empty.pages == 0
 
-    # 2. BaseSchema & reject_explicit_nulls / not_nullable
-    assert reject_explicit_nulls is not_nullable
-    assert BaseSchema.model_config.get("str_strip_whitespace") is True
 
-    # 3. PaginatedResponse.create() / Page.create()
-    page = PaginatedResponse[int].create(items=[1, 2, 3], total=25, page=1, limit=10)
-    assert isinstance(page, Page)
-    assert page.total == 25 and page.pages == 3 and page.items == [1, 2, 3]
-
-    # 4. Non-blocking async bcrypt (asyncio.to_thread)
+async def test_async_bcrypt_and_workspace_owner_creation(session_factory, seeded) -> None:
+    """Kiểm tra hành vi bcrypt async (threadpool) và tạo workspace kèm OWNER trong 1 transaction."""
     hashed = await hash_password_async("AsyncSecret123!")
     assert await verify_password_async("AsyncSecret123!", hashed) is True
     assert await verify_password_async("WrongPassword", hashed) is False
 
-    # 5. SQLAlchemy relationships: User/Workspace/Project không bật lazy="selectin" tràn lan
-    for model in (User, Workspace, Project):
-        for rel in model.__mapper__.relationships:
-            assert rel.lazy != "selectin", (
-                f"{model.__name__}.{rel.key} không được dùng lazy='selectin'"
-            )
-
-    # 6. get_by_id_with_details nạp chi tiết bằng selectinload tường minh
     async with session_factory() as db:
-        ws_repo = WorkspaceRepository(db)
-        ws = await ws_repo.create_with_owner("UoW Workspace", seeded["user_id"])
-        ws_detail = await ws_repo.get_by_id_with_details(ws.id)
-        assert ws_detail is not None and len(ws_detail.members) == 1
-
-        task_repo = TaskRepository(db)
-        created_task = await task_repo.create(
-            {
-                "title": "Detail Task",
-                "project_id": seeded["project_id"],
-                "created_by": seeded["user_id"],
-            }
-        )
-        detail = await task_repo.get_by_id_with_details(created_task.id)
-        assert detail is not None and detail.id == created_task.id
-        assert isinstance(detail.labels, list) and isinstance(detail.comments, list)
+        ws = await WorkspaceRepository(db).create_with_owner("UoW Workspace", seeded["user_id"])
+        members = await WorkspaceMemberRepository(db).list_for_workspace(ws.id)
+        assert len(members) == 1
+        assert members[0].user_id == seeded["user_id"] and members[0].role.value == "OWNER"

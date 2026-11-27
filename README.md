@@ -85,13 +85,13 @@ Mọi cấu hình được kiểm tra **fail-fast** khi khởi động tại `ap
 ## 4. Kiến trúc, Tối ưu & Chất lượng mã nguồn (Session 8)
 
 - **DRY (Don't Repeat Yourself)**:
-  - Tập trung toàn bộ hằng số giới hạn độ dài, phân trang và thông báo lỗi tại `app/core/constants.py` (`TITLE_MIN_LENGTH`, `TITLE_MAX_LENGTH`, `PASSWORD_MAX_LENGTH = 72`, `DEFAULT_LIMIT`, `MAX_LIMIT = 100`, `VERSION_TTL_SECONDS`, `MEMORY_CACHE_MAX_KEYS`, v.v.).
-  - `BaseSchema` (`app/schemas/base.py`) bật sẵn `str_strip_whitespace=True` và cung cấp `not_nullable` / `reject_explicit_nulls` để chặn `null` gửi tường minh vào các trường `NOT NULL` khi gọi `PATCH`.
-  - Chuẩn hoá phân trang qua factory `Page.create()` / `PaginatedResponse.create()` (`app/schemas/common.py`).
+  - Tập trung toàn bộ hằng số giới hạn độ dài, phân trang và thông báo lỗi tại `app/core/constants.py` (`TITLE_MIN_LENGTH`, `TITLE_MAX_LENGTH`, `BCRYPT_MAX_BYTES`, `DEFAULT_PAGE_LIMIT`, `MAX_PAGE_LIMIT`, `VERSION_TTL_SECONDS`, v.v.).
+  - `BaseSchema` (`app/schemas/base.py`) bật sẵn `str_strip_whitespace=True` và cung cấp `not_nullable` để chặn `null` gửi tường minh vào các trường `NOT NULL` khi gọi `PATCH`.
+  - Chuẩn hoá phân trang qua factory `Page.create()` (`app/schemas/common.py`).
   - Gom toàn bộ kiểm tra tồn tại + phân quyền RBAC + trạng thái archive của project về `ResourceAccess` (`app/services/resource_access.py`).
 - **Tối ưu Database / Cache / Async**:
-  - **SQLAlchemy Loading**: Không dùng `lazy="selectin"` tràn lan trên `User`/`Workspace`/`Project`/`Comment`; kết hợp `passive_deletes=True` để DB tự xử lý `ON DELETE CASCADE` và dùng `selectinload` tường minh tại `get_by_id_with_details`.
-  - **Unit-of-Work Transaction**: `BaseRepository` hỗ trợ `flush()` và gom nhiều thao tác ghi (như tạo `Workspace` + thêm `WorkspaceMember` role `OWNER`) vào 1 lần `commit` duy nhất.
+  - **SQLAlchemy Loading**: Không dùng `lazy="selectin"` tràn lan trên `User`/`Workspace`/`Project`/`Comment`; kết hợp `passive_deletes=True` để DB tự xử lý `ON DELETE CASCADE`.
+  - **Transaction**: `WorkspaceRepository.create_with_owner` gom thao tác tạo `Workspace` và thêm `WorkspaceMember` role `OWNER` vào 1 lần `commit` duy nhất.
   - **Non-blocking Async**: Đưa `bcrypt` hashing/verification sang threadpool (`run_in_threadpool` trong `app/core/security.py`) để không làm nghẽn Event Loop của FastAPI.
 - **OpenAPI Error Documentation**:
   - Chuẩn hoá `ErrorResponse` / `InternalErrorResponse` (`app/schemas/error.py`) và `error_responses(...)` (`app/api/responses.py`) cho toàn bộ endpoints trên Swagger UI & ReDoc.

@@ -1,7 +1,6 @@
 from typing import Any
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import selectinload
 
 from app.models import Label, Project, Task, WorkspaceMember, task_labels
 from app.models.enums import TaskPriority, TaskStatus
@@ -10,15 +9,6 @@ from app.repositories.base import BaseRepository
 
 class TaskRepository(BaseRepository[Task]):
     model = Task
-
-    async def get_by_id_with_details(self, task_id: int) -> Task | None:
-        """Chỉ dùng selectinload tường minh khi cần lấy chi tiết task kèm labels và comments."""
-        stmt = (
-            select(Task)
-            .where(Task.id == task_id)
-            .options(selectinload(Task.labels), selectinload(Task.comments))
-        )
-        return await self.session.scalar(stmt)
 
     def _visible_to(self, user_id: int) -> Select[Any]:
         """Task thuộc project của các workspace mà user là thành viên."""

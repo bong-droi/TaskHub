@@ -25,6 +25,3 @@ class Page[T](BaseModel):
     ) -> "Page[T]":
         """Factory chuẩn hoá phân trang từ cặp (items, total) của repository/service."""
         return cls(items=list(items), total=total, page=page, limit=limit)
-
-
-PaginatedResponse = Page

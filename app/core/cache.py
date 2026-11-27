@@ -5,7 +5,7 @@ hoá cả nhóm key mà không phải SCAN/xoá hàng loạt (xem services/task_
 """
 
 import logging
-from typing import Protocol
+from typing import Protocol, cast
 
 from redis.asyncio import Redis
 
@@ -61,8 +61,7 @@ class RedisCache:
         return cls(client)
 
     async def get(self, key: str) -> str | None:
-        val = await self._client.get(key)
-        return str(val) if val is not None else None
+        return cast(str | None, await self._client.get(key))
 
     async def set(self, key: str, value: str, ttl: int) -> None:
         await self._client.set(key, value, ex=ttl)

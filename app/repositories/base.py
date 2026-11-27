@@ -1,4 +1,4 @@
-"""BaseRepository[T]: CRUD + phân trang + Unit-of-Work flush/commit dùng chung cho mọi model."""
+"""BaseRepository[T]: CRUD dùng chung cho mọi model."""
 
 import builtins
 from typing import Any
@@ -33,41 +33,20 @@ class BaseRepository[ModelT: Base]:
         stmt = select(func.count()).select_from(self.model).where(*filters)
         return await self.session.scalar(stmt) or 0
 
-    async def paginate(
-        self, skip: int = 0, limit: int = 20, *filters: Any
-    ) -> tuple[builtins.list[ModelT], int]:
-        """Trả về cặp (items, total) chuẩn hoá cho PaginatedResponse.create()."""
-        items = await self.list(skip, limit, *filters)
-        total = await self.count(*filters)
-        return items, total
-
-    async def flush(self) -> None:
-        """Đẩy thay đổi xuống DB trong cùng transaction (Unit-of-Work) mà chưa commit."""
-        await self.session.flush()
-
-    async def create(self, data: dict[str, Any], *, commit: bool = True) -> ModelT:
+    async def create(self, data: dict[str, Any]) -> ModelT:
         obj = self.model(**data)
         self.session.add(obj)
-        if commit:
-            await self.session.commit()
-            await self.session.refresh(obj)  # nạp lại giá trị server_default (created_at)
-        else:
-            await self.session.flush()
+        await self.session.commit()
+        await self.session.refresh(obj)  # nạp lại giá trị server_default (created_at)
         return obj
 
-    async def update(self, obj: ModelT, data: dict[str, Any], *, commit: bool = True) -> ModelT:
+    async def update(self, obj: ModelT, data: dict[str, Any]) -> ModelT:
         for key, value in data.items():
             setattr(obj, key, value)
-        if commit:
-            await self.session.commit()
-            await self.session.refresh(obj)
-        else:
-            await self.session.flush()
+        await self.session.commit()
+        await self.session.refresh(obj)
         return obj
 
-    async def delete(self, obj: ModelT, *, commit: bool = True) -> None:
+    async def delete(self, obj: ModelT) -> None:
         await self.session.delete(obj)
-        if commit:
-            await self.session.commit()
-        else:
-            await self.session.flush()
+        await self.session.commit()
