@@ -6,6 +6,7 @@
 *.sqlite3
 .git
 .git/
+.github/
 .gitignore
 __pycache__
 __pycache__/

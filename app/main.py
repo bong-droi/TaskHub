@@ -28,6 +28,10 @@ app = FastAPI(
     version=APP_VERSION,
     description="TaskHub - Hệ thống quản lý công việc (Task Management API)",
     lifespan=lifespan,
+    # Không lộ tài liệu/schema API khi chạy production
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 register_exception_handlers(app)
 app.add_middleware(RequestContextMiddleware)

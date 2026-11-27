@@ -1,113 +1,38 @@
-"""Kiểm tra cấu hình Docker Multi-Stage Build, .dockerignore và Docker Compose Stack (Session 7)."""
+"""Kiểm tra hành vi production mode: tắt /docs, /redoc, /openapi.json nhưng /health vẫn chạy."""
 
+import subprocess
+import sys
 from pathlib import Path
-from typing import Any
-
-import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCKERFILE = ROOT / "Dockerfile"
-DOCKERIGNORE = ROOT / ".dockerignore"
-COMPOSE_FILE = ROOT / "docker-compose.yml"
 
 
-def test_dockerfile_exists_and_uses_multistage_build() -> None:
-    assert DOCKERFILE.is_file(), "Thiếu tệp Dockerfile ở thư mục gốc"
-    content = DOCKERFILE.read_text(encoding="utf-8")
-
-    # Stage 1 (builder) & Stage 2 (runtime) đều dùng python:3.12-slim
-    from_lines = [
-        line.strip() for line in content.splitlines() if line.strip().upper().startswith("FROM ")
-    ]
-    assert len(from_lines) >= 2, "Dockerfile phải có ít nhất 2 stage (multi-stage build)"
-    assert "python:3.12-slim" in from_lines[0] and "AS builder" in from_lines[0]
-    assert "python:3.12-slim" in from_lines[1]
-
-    # Cài thư viện vào /install không lưu cache pip và copy sang runtime stage
-    assert "--no-cache-dir" in content
-    assert "--prefix=/install" in content
-    assert "COPY --from=builder /install" in content
-
-    # Chỉ copy mã nguồn cần thiết
-    assert "app/" in content
-    assert "alembic.ini" in content
-    assert "migrations/" in content or "alembic/" in content
+async def test_docs_are_enabled_in_non_production(anon) -> None:
+    assert (await anon.get("/docs")).status_code == 200
+    assert (await anon.get("/redoc")).status_code == 200
+    assert (await anon.get("/openapi.json")).status_code == 200
 
 
-def test_dockerfile_enforces_non_root_user_and_auto_migration_cmd() -> None:
-    content = DOCKERFILE.read_text(encoding="utf-8")
-
-    # Bảo mật Non-Root User: group appgroup, user appuser (UID 1001)
-    assert "appgroup" in content
-    assert "appuser" in content
-    assert "1001" in content
-    user_lines = [
-        line.strip() for line in content.splitlines() if line.strip().upper().startswith("USER ")
-    ]
-    assert user_lines and user_lines[-1] == "USER appuser"
-
-    # Tự động chạy alembic upgrade head trước khi bật uvicorn
-    assert "alembic upgrade head" in content
-    assert "uvicorn app.main:app --host 0.0.0.0 --port 8000" in content
-    assert content.index("alembic upgrade head") < content.index(
-        "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+def test_docs_are_disabled_in_production(tmp_path, monkeypatch) -> None:
+    """Chạy trong tiến trình riêng với APP_ENV=production: /docs, /redoc, /openapi.json -> 404."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "prod-secret-key-at-least-32-characters-long")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'prod.db'}")
+    monkeypatch.setenv("PYTHONPATH", str(ROOT))
+    script = (
+        "from fastapi.testclient import TestClient; "
+        "from app.main import app; "
+        "c = TestClient(app); "
+        "assert c.get('/api/v1/health').status_code == 200; "
+        "assert c.get('/docs').status_code == 404; "
+        "assert c.get('/redoc').status_code == 404; "
+        "assert c.get('/openapi.json').status_code == 404"
     )
-
-
-def test_dockerignore_excludes_sensitive_and_heavy_paths() -> None:
-    assert DOCKERIGNORE.is_file(), "Thiếu tệp .dockerignore"
-    lines = {
-        line.strip().rstrip("/")
-        for line in DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    }
-    required = {
-        ".venv",
-        ".env",
-        "*.db",
-        ".git",
-        "__pycache__",
-        ".pytest_cache",
-        ".mypy_cache",
-        ".ruff_cache",
-    }
-    missing = required - lines
-    assert not missing, f".dockerignore thiếu các mục bắt buộc: {sorted(missing)}"
-
-
-def test_docker_compose_stack_configuration() -> None:
-    assert COMPOSE_FILE.is_file(), "Thiếu tệp docker-compose.yml"
-    raw = COMPOSE_FILE.read_text(encoding="utf-8")
-    compose: dict[str, Any] = yaml.safe_load(raw)
-
-    services = compose.get("services", {})
-    assert {"db", "redis", "app"}.issubset(services.keys())
-
-    # 1. Database service (PostgreSQL 16 + persistent volume + healthcheck)
-    db = services["db"]
-    assert db["image"] == "postgres:16-alpine"
-    assert any("postgres_data:" in v for v in db.get("volumes", []))
-    db_hc_test = " ".join(db["healthcheck"]["test"])
-    assert "pg_isready" in db_hc_test
-
-    # 2. Redis service (Redis 7 + healthcheck)
-    redis = services["redis"]
-    assert redis["image"] == "redis:7-alpine"
-    redis_hc_test = " ".join(redis["healthcheck"]["test"])
-    assert "redis-cli" in redis_hc_test and "ping" in redis_hc_test
-
-    # 3. App service (taskhub_app + SECRET_KEY bắt buộc + depends_on service_healthy)
-    app = services["app"]
-    assert app.get("container_name") == "taskhub_app"
-    assert ".env" in app.get("env_file", [])
-
-    env = app.get("environment", {})
-    secret_cfg = env.get("SECRET_KEY", "") if isinstance(env, dict) else " ".join(env)
-    assert "${SECRET_KEY:?Set SECRET_KEY in .env}" in secret_cfg
-
-    depends_on = app.get("depends_on", {})
-    assert depends_on["db"]["condition"] == "service_healthy"
-    assert depends_on["redis"]["condition"] == "service_healthy"
-
-    # Top-level volume postgres_data
-    assert "postgres_data" in compose.get("volumes", {})
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr

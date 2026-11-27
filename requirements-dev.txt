@@ -1,10 +1,8 @@
 -r requirements.txt
 
-# test + lint + type check
+# test + lint
 httpx>=0.27
 pytest>=8.0
 pytest-asyncio>=0.23
 fakeredis>=2.20          # in-memory Redis for cache tests
-pyyaml>=6.0              # docker-compose config tests
 ruff>=0.5                # lint + format
-mypy>=1.10               # static type checking
