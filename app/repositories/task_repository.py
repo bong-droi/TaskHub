@@ -1,5 +1,8 @@
 """Tầng data access. Ngày 1: in-memory. Ngày 2: thay bằng SQLAlchemy."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
+
+from app.schemas.enums import TaskStatus
 
 
 class TaskRepository:
@@ -8,7 +11,11 @@ class TaskRepository:
         self._next_id = 1
 
     def list(self, skip: int = 0, limit: int = 20) -> list[dict]:
-        return list(self._data.values())[skip : skip + limit]
+        sorted_tasks = sorted(self._data.values(), key=lambda t: t["id"])
+        return sorted_tasks[skip : skip + limit]
+
+    def total(self) -> int:
+        return len(self._data)
 
     def get(self, task_id: int) -> dict | None:
         return self._data.get(task_id)
@@ -17,8 +24,8 @@ class TaskRepository:
         task = {
             **data,
             "id": self._next_id,
-            "status": "TODO",
-            "created_at": datetime.now(timezone.utc),
+            "status": TaskStatus.TODO,
+            "created_at": datetime.now(UTC),
         }
         self._data[self._next_id] = task
         self._next_id += 1
