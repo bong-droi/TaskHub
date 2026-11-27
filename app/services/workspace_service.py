@@ -2,6 +2,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.constants import (
     ALREADY_MEMBER,
+    CANNOT_CHANGE_OWNER_ROLE,
     CANNOT_REMOVE_OWNER,
     MEMBER_NOT_FOUND,
     USER_NOT_FOUND,
@@ -15,7 +16,13 @@ from app.repositories.workspace_repository import (
     WorkspaceMemberRepository,
     WorkspaceRepository,
 )
-from app.schemas.workspace import MemberInvite, MemberRead, WorkspaceCreate, WorkspaceUpdate
+from app.schemas.workspace import (
+    MemberInvite,
+    MemberRead,
+    MemberRoleUpdate,
+    WorkspaceCreate,
+    WorkspaceUpdate,
+)
 from app.services.resource_access import ResourceAccess
 
 
@@ -85,6 +92,23 @@ class WorkspaceService:
             )
             for m in await self.members.list_for_workspace(workspace_id)
         ]
+
+    async def update_member_role(
+        self, user: User, workspace_id: int, target_id: int, payload: MemberRoleUpdate
+    ) -> MemberRead:
+        ws = await self.resources.workspace(user, workspace_id, MANAGE_ROLES)
+        if target_id == ws.owner_id:
+            raise BadRequestException(CANNOT_CHANGE_OWNER_ROLE)
+        member = await self.members.get_member(workspace_id, target_id)
+        if member is None:
+            raise NotFoundException(MEMBER_NOT_FOUND)
+        target = await self.users.get(target_id)
+        if target is None:
+            raise NotFoundException(USER_NOT_FOUND)
+        updated = await self.members.update(member, {"role": payload.role})
+        return MemberRead(
+            user_id=target.id, email=target.email, full_name=target.full_name, role=updated.role
+        )
 
     async def remove_member(self, user: User, workspace_id: int, target_id: int) -> None:
         ws = await self.resources.workspace(user, workspace_id, MANAGE_ROLES)

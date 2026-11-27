@@ -54,3 +54,23 @@ async def test_change_password_flow(anon, client):
     assert (
         await anon.post("/api/v1/auth/refresh", json={"refresh_token": refresh})
     ).status_code == 401
+
+
+async def test_change_password_commits_once_atomically(client, monkeypatch):
+    """Đổi mật khẩu + thu hồi mọi refresh token phải nằm trong cùng 1 transaction (1 lần commit)."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    commits = 0
+    orig_commit = AsyncSession.commit
+
+    async def counting_commit(self):
+        nonlocal commits
+        commits += 1
+        return await orig_commit(self)
+
+    monkeypatch.setattr(AsyncSession, "commit", counting_commit)
+    r = await client.post(
+        f"{ME}/password", json={"current_password": PASSWORD, "new_password": "newpass123"}
+    )
+    assert r.status_code == 204
+    assert commits == 1

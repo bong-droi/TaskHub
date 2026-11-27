@@ -1,3 +1,5 @@
+from typing import Any
+
 import jwt
 from sqlalchemy.exc import IntegrityError
 
@@ -62,22 +64,28 @@ class AuthService:
         record = await self.tokens.get_by_jti(payload["jti"])
         if record is None:
             raise UnauthorizedException(INVALID_REFRESH_TOKEN)
-        # Thu hồi nguyên tử: trong 2 request gửi cùng 1 refresh token đồng thời, chỉ 1 request
-        # có rowcount=1 được xoay token; request còn lại bị từ chối và thu hồi cả chuỗi.
-        if not await self.tokens.revoke_if_active(record.jti):
-            await self.tokens.revoke_all_for_user(record.user_id)
+        user_id = record.user_id
+        jti = record.jti
+        if record.revoked:
+            # Token đã dùng/thu hồi mà vẫn bị gửi lại -> nghi bị đánh cắp: thu hồi toàn bộ
+            await self.tokens.revoke_all_for_user(user_id)
             raise UnauthorizedException(REFRESH_TOKEN_REVOKED)
-        user = await self.users.get(record.user_id)
+        user = await self.users.get(user_id)
         if user is None or not user.is_active:
             raise UnauthorizedException(ACCOUNT_UNAVAILABLE)
-        return await self._issue_pair(user.id)
+        new_refresh, new_jti, expires_at = create_refresh_token(str(user_id))
+        # Thu hồi token cũ + tạo token mới trong 1 transaction: chỉ 1 request đồng thời thành công
+        if not await self.tokens.rotate(jti, new_jti, user_id, expires_at):
+            await self.tokens.revoke_all_for_user(user_id)
+            raise UnauthorizedException(REFRESH_TOKEN_REVOKED)
+        return TokenPair(access_token=create_access_token(str(user_id)), refresh_token=new_refresh)
 
     async def logout(self, refresh_token: str) -> None:
         payload = self._decode_refresh(refresh_token)
         await self.tokens.revoke_if_active(payload["jti"])
 
     @staticmethod
-    def _decode_refresh(token: str) -> dict:
+    def _decode_refresh(token: str) -> dict[str, Any]:
         try:
             return decode_token(token, TokenType.REFRESH)
         except jwt.InvalidTokenError:

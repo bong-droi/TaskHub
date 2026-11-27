@@ -1,5 +1,6 @@
-"""BaseRepository[T]: CRUD + phân trang dùng chung cho mọi model."""
+"""BaseRepository[T]: CRUD dùng chung cho mọi model."""
 
+import builtins
 from typing import Any
 
 from sqlalchemy import func, select
@@ -17,7 +18,7 @@ class BaseRepository[ModelT: Base]:
     async def get(self, obj_id: int) -> ModelT | None:
         return await self.session.get(self.model, obj_id)
 
-    async def list(self, skip: int = 0, limit: int = 20, *filters: Any) -> list[ModelT]:
+    async def list(self, skip: int = 0, limit: int = 20, *filters: Any) -> builtins.list[ModelT]:
         stmt = (
             select(self.model)
             .where(*filters)
@@ -26,7 +27,7 @@ class BaseRepository[ModelT: Base]:
             .limit(limit)
         )
         result = await self.session.scalars(stmt)
-        return list(result.all())
+        return builtins.list(result.all())
 
     async def count(self, *filters: Any) -> int:
         stmt = select(func.count()).select_from(self.model).where(*filters)
