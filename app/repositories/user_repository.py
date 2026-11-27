@@ -1,4 +1,7 @@
+from typing import Any, cast
+
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 
 from app.models import RefreshToken, User
 from app.repositories.base import BaseRepository
@@ -19,10 +22,13 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
 
     async def revoke_if_active(self, jti: str) -> bool:
         """Thu hồi token nguyên tử (atomic): chỉ 1 request đồng thời nhận True."""
-        result = await self.session.execute(
-            update(RefreshToken)
-            .where(RefreshToken.jti == jti, RefreshToken.revoked.is_(False))
-            .values(revoked=True)
+        result = cast(
+            CursorResult[Any],
+            await self.session.execute(
+                update(RefreshToken)
+                .where(RefreshToken.jti == jti, RefreshToken.revoked.is_(False))
+                .values(revoked=True)
+            ),
         )
         await self.session.commit()
         return (result.rowcount or 0) == 1

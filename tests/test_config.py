@@ -33,7 +33,7 @@ def test_defaults_are_valid_for_development():
 
 def test_secret_key_is_required_even_in_development():
     with pytest.raises(ValidationError, match="SECRET_KEY"):
-        Settings(_env_file=None)
+        Settings(_env_file=None)  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------- production & APP_ENV
@@ -65,7 +65,7 @@ def test_app_env_in_dotenv_mismatching_os_env_is_rejected(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ValidationError, match="APP_ENV"):
-        Settings(_env_file=env_file)
+        Settings(_env_file=env_file)  # type: ignore[call-arg]
 
 
 def test_os_app_env_loads_matching_env_file_in_subprocess(tmp_path, monkeypatch):
@@ -193,7 +193,7 @@ def test_environment_variables_are_read_and_parsed(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://cache:6379/2")
     monkeypatch.setenv("CACHE_TTL_SECONDS", "30")
     monkeypatch.setenv("SMTP_STARTTLS", "false")
-    s = Settings(_env_file=None)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.REDIS_URL == "redis://cache:6379/2"
     assert s.CACHE_TTL_SECONDS == 30 and s.SMTP_STARTTLS is False
 

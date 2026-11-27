@@ -7,6 +7,7 @@ from app.schemas.common import Page
 from app.schemas.workspace import (
     MemberInvite,
     MemberRead,
+    MemberRoleUpdate,
     WorkspaceCreate,
     WorkspaceRead,
     WorkspaceUpdate,
@@ -88,6 +89,22 @@ async def invite_member(
 )
 async def list_members(workspace_id: IdPath, user: CurrentUser, service: WorkspaceServiceDep):
     return await service.list_members(user, workspace_id)
+
+
+@router.patch(
+    "/{workspace_id}/members/{user_id}",
+    response_model=MemberRead,
+    summary="Đổi vai trò thành viên (OWNER)",
+    responses=error_responses(400, 403, 404),
+)
+async def update_member_role(
+    workspace_id: IdPath,
+    user_id: IdPath,
+    payload: MemberRoleUpdate,
+    user: CurrentUser,
+    service: WorkspaceServiceDep,
+):
+    return await service.update_member_role(user, workspace_id, user_id, payload)
 
 
 @router.delete(
