@@ -62,6 +62,11 @@ DATA_CONFLICT = "Dữ liệu xung đột với dữ liệu hiện có"
 MAX_DB_ID = 2**31 - 1  # khớp INTEGER 32-bit của PostgreSQL/MySQL (SQLite rộng hơn)
 MAX_PAGE_NUMBER = 100_000  # offset tối đa = MAX_PAGE_NUMBER * MAX_PAGE_LIMIT = 10 triệu, không tràn
 
+# Cache
+# Key version phải sống lâu hơn mọi key dữ liệu của nó (nếu version hết hạn rồi reset về 0 thì
+# key dữ liệu cũ có thể "sống lại"). CACHE_TTL_SECONDS không được vượt quá giá trị này.
+VERSION_TTL_SECONDS = 24 * 60 * 60
+
 # Thông báo lỗi validation của schema
 FIELD_CANNOT_BE_NULL = "Không được để null"
 DUE_DATE_IN_PAST = "due_date không được ở quá khứ"

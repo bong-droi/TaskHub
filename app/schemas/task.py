@@ -81,7 +81,7 @@ class TaskRead(TaskBase):
     id: int
     project_id: int
     assignee_id: int | None
-    created_by: int | None
+    created_by: int
     status: TaskStatus
     created_at: datetime
     labels: list[LabelRead] = []

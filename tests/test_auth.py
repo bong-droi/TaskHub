@@ -124,6 +124,29 @@ async def test_refresh_reuse_revokes_whole_family(anon):
     assert again.status_code == 401
 
 
+async def test_concurrent_refresh_only_rotates_once(anon, session_factory, monkeypatch):
+    """2 request đọc cùng refresh token đồng thời: chỉ 1 xoay được, request kia phải 401."""
+    from app.repositories.user_repository import RefreshTokenRepository
+
+    old = (await login(anon)).json()
+    orig_get = RefreshTokenRepository.get_by_jti
+    raced = False
+
+    async def get_and_race(self, jti: str):
+        nonlocal raced
+        record = await orig_get(self, jti)
+        if not raced and record is not None:
+            raced = True
+            # Request song song chen vào thu hồi token ngay sau khi request này vừa đọc record
+            async with session_factory() as other_db:
+                assert await RefreshTokenRepository(other_db).revoke_if_active(jti) is True
+        return record
+
+    monkeypatch.setattr(RefreshTokenRepository, "get_by_jti", get_and_race)
+    r = await anon.post(f"{AUTH}/refresh", json={"refresh_token": old["refresh_token"]})
+    assert r.status_code == 401 and r.json() == {"detail": REFRESH_TOKEN_REVOKED}
+
+
 async def test_refresh_rejects_access_token_and_garbage(anon):
     tokens = (await login(anon)).json()
     r = await anon.post(f"{AUTH}/refresh", json={"refresh_token": tokens["access_token"]})

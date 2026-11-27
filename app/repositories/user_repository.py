@@ -17,6 +17,16 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
     async def get_by_jti(self, jti: str) -> RefreshToken | None:
         return await self.session.scalar(select(RefreshToken).where(RefreshToken.jti == jti))
 
+    async def revoke_if_active(self, jti: str) -> bool:
+        """Thu hồi token nguyên tử (atomic): chỉ 1 request đồng thời nhận True."""
+        result = await self.session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.jti == jti, RefreshToken.revoked.is_(False))
+            .values(revoked=True)
+        )
+        await self.session.commit()
+        return (result.rowcount or 0) == 1
+
     async def revoke_all_for_user(self, user_id: int) -> None:
         await self.session.execute(
             update(RefreshToken)

@@ -4,16 +4,23 @@ from app.models.enums import ProjectStatus
 from app.repositories.project_repository import ProjectRepository
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.services.resource_access import ResourceAccess
+from app.services.task_cache import TaskListCache
 
 
 class ProjectService:
-    def __init__(self, projects: ProjectRepository, resources: ResourceAccess) -> None:
+    def __init__(
+        self, projects: ProjectRepository, resources: ResourceAccess, cache: TaskListCache
+    ) -> None:
         self.projects = projects
         self.resources = resources
+        self.cache = cache
 
     async def create(self, user: User, workspace_id: int, payload: ProjectCreate) -> Project:
         await self.resources.workspace(user, workspace_id, WRITE_ROLES)
-        return await self.projects.create({"workspace_id": workspace_id, **payload.model_dump()})
+        project = await self.projects.create({"workspace_id": workspace_id, **payload.model_dump()})
+        # SQLite có thể dùng lại id của project đã xoá: đổi version để không dính cache cũ
+        await self.cache.invalidate(project.id)
+        return project
 
     async def list_in_workspace(
         self, user: User, workspace_id: int, skip: int, limit: int
@@ -41,3 +48,4 @@ class ProjectService:
     async def delete(self, user: User, project_id: int) -> None:
         project = await self.resources.project(user, project_id, MANAGE_ROLES)
         await self.projects.delete(project)
+        await self.cache.invalidate(project_id)

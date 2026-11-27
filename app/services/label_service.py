@@ -7,12 +7,16 @@ from app.models import Label, User
 from app.repositories.label_repository import LabelRepository
 from app.schemas.label import LabelCreate, LabelUpdate
 from app.services.resource_access import ResourceAccess
+from app.services.task_cache import TaskListCache
 
 
 class LabelService:
-    def __init__(self, labels: LabelRepository, resources: ResourceAccess) -> None:
+    def __init__(
+        self, labels: LabelRepository, resources: ResourceAccess, cache: TaskListCache
+    ) -> None:
         self.labels = labels
         self.resources = resources
+        self.cache = cache
 
     async def _ensure_unique_name(self, project_id: int, name: str, except_id: int | None = None):
         existing = await self.labels.get_by_name(project_id, name)
@@ -45,11 +49,14 @@ class LabelService:
         if "name" in data:
             await self._ensure_unique_name(ctx.project.id, data["name"], except_id=ctx.label.id)
         try:
-            return await self.labels.update(ctx.label, data)
+            updated = await self.labels.update(ctx.label, data)
         except IntegrityError:  # đổi tên trùng nhau cùng lúc: cũng phải trả 409 chứ không phải 500
             await self.labels.session.rollback()
             raise ConflictException(LABEL_NAME_EXISTS) from None
+        await self.cache.invalidate(ctx.project.id)  # tên/màu label hiển thị trong task đã cache
+        return updated
 
     async def delete(self, user: User, label_id: int) -> None:
         ctx = await self.resources.label(user, label_id, WRITE_ROLES)
         await self.labels.delete(ctx.label)  # các task đang gắn label này tự được gỡ
+        await self.cache.invalidate(ctx.project.id)

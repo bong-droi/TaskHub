@@ -15,11 +15,12 @@ USER = MagicMock(id=7)
 
 @pytest.fixture
 def parts():
-    tasks, users = AsyncMock(), AsyncMock()
+    tasks, users, cache = AsyncMock(), AsyncMock(), AsyncMock()
+    notifier = MagicMock()  # task_assigned là hàm thường (chỉ xếp lịch chạy nền)
     resources = MagicMock()  # ensure_active là hàm thường; các loader là async
     for name in ("project", "task", "label", "is_member"):
         setattr(resources, name, AsyncMock())
-    return TaskService(tasks, users, resources), tasks, resources
+    return TaskService(tasks, users, resources, cache, notifier), tasks, resources
 
 
 async def test_create_task_goes_through_injected_dependencies(parts):

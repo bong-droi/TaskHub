@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import CurrentUser, PaginationDep, TaskServiceDep
 from app.api.params import IdPath
@@ -8,6 +8,7 @@ from app.core.constants import MAX_DB_ID
 from app.models.enums import TaskPriority, TaskStatus
 from app.schemas.common import Page
 from app.schemas.task import TaskCreateInProject, TaskRead
+from app.services.task_cache import TaskListParams
 
 router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["tasks"])
 
@@ -39,21 +40,23 @@ class TaskFilters:
 )
 async def list_project_tasks(
     project_id: IdPath,
+    response: Response,
     user: CurrentUser,
     service: TaskServiceDep,
     page: PaginationDep,
     filters: Annotated[TaskFilters, Depends()],
 ):
-    return await service.list_in_project(
-        user,
-        project_id,
-        page.page,
-        page.limit,
+    params = TaskListParams(
+        page=page.page,
+        limit=page.limit,
         status=filters.status,
         priority=filters.priority,
         assignee_id=filters.assignee_id,
         label_id=filters.label_id,
     )
+    result = await service.list_in_project(user, project_id, params)
+    response.headers["X-Cache"] = result.cache  # HIT | MISS | BYPASS (cache tắt)
+    return result.page
 
 
 @router.post(

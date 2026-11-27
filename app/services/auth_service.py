@@ -12,12 +12,12 @@ from app.core.constants import (
 from app.core.exceptions import ConflictException, ForbiddenException, UnauthorizedException
 from app.core.security import (
     DUMMY_HASH,
-    REFRESH,
+    TokenType,
     create_access_token,
     create_refresh_token,
     decode_token,
-    hash_password,
-    verify_password,
+    hash_password_async,
+    verify_password_async,
 )
 from app.models import User
 from app.repositories.user_repository import RefreshTokenRepository, UserRepository
@@ -33,12 +33,13 @@ class AuthService:
         email = payload.email.lower()
         if await self.users.get_by_email(email):
             raise ConflictException(EMAIL_ALREADY_REGISTERED)
+        hashed = await hash_password_async(payload.password)
         try:
             return await self.users.create(
                 {
                     "email": email,
                     "full_name": payload.full_name,
-                    "hashed_password": hash_password(payload.password),
+                    "hashed_password": hashed,
                 }
             )
         except IntegrityError:  # 2 request đăng ký cùng lúc
@@ -48,9 +49,9 @@ class AuthService:
     async def login(self, email: str, password: str) -> TokenPair:
         user = await self.users.get_by_email(email.lower())
         if user is None:
-            verify_password(password, DUMMY_HASH)  # cân bằng thời gian xử lý
+            await verify_password_async(password, DUMMY_HASH)  # cân bằng thời gian xử lý
             raise UnauthorizedException(INVALID_CREDENTIALS)
-        if not verify_password(password, user.hashed_password):
+        if not await verify_password_async(password, user.hashed_password):
             raise UnauthorizedException(INVALID_CREDENTIALS)
         if not user.is_active:
             raise ForbiddenException(ACCOUNT_DISABLED)
@@ -61,26 +62,24 @@ class AuthService:
         record = await self.tokens.get_by_jti(payload["jti"])
         if record is None:
             raise UnauthorizedException(INVALID_REFRESH_TOKEN)
-        if record.revoked:
-            # Token đã dùng/thu hồi mà vẫn bị gửi lại -> nghi bị đánh cắp: thu hồi toàn bộ
+        # Thu hồi nguyên tử: trong 2 request gửi cùng 1 refresh token đồng thời, chỉ 1 request
+        # có rowcount=1 được xoay token; request còn lại bị từ chối và thu hồi cả chuỗi.
+        if not await self.tokens.revoke_if_active(record.jti):
             await self.tokens.revoke_all_for_user(record.user_id)
             raise UnauthorizedException(REFRESH_TOKEN_REVOKED)
         user = await self.users.get(record.user_id)
         if user is None or not user.is_active:
             raise UnauthorizedException(ACCOUNT_UNAVAILABLE)
-        await self.tokens.update(record, {"revoked": True})  # rotation: mỗi token dùng 1 lần
         return await self._issue_pair(user.id)
 
     async def logout(self, refresh_token: str) -> None:
         payload = self._decode_refresh(refresh_token)
-        record = await self.tokens.get_by_jti(payload["jti"])
-        if record is not None and not record.revoked:
-            await self.tokens.update(record, {"revoked": True})
+        await self.tokens.revoke_if_active(payload["jti"])
 
     @staticmethod
     def _decode_refresh(token: str) -> dict:
         try:
-            return decode_token(token, REFRESH)
+            return decode_token(token, TokenType.REFRESH)
         except jwt.InvalidTokenError:
             raise UnauthorizedException(INVALID_REFRESH_TOKEN) from None
 
