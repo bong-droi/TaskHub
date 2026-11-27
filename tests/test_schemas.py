@@ -68,6 +68,9 @@ def test_due_date_message_comes_from_constants():
     with pytest.raises(ValidationError) as exc:
         TaskCreateInProject.model_validate({"title": "x", "due_date": "2000-01-01"})
     assert "quá khứ" in exc.value.errors()[0]["msg"]
+    with pytest.raises(ValidationError) as exc_patch:
+        TaskUpdate.model_validate({"due_date": "2000-01-01"})
+    assert "quá khứ" in exc_patch.value.errors()[0]["msg"]
 
 
 # ---------------------------------------------------------------- DbId
