@@ -2,6 +2,7 @@ from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, PaginationDep, WorkspaceServiceDep
 from app.api.params import IdPath
+from app.api.responses import error_responses
 from app.schemas.common import Page
 from app.schemas.workspace import (
     MemberInvite,
@@ -34,12 +35,22 @@ async def list_workspaces(user: CurrentUser, service: WorkspaceServiceDep, page:
     )
 
 
-@router.get("/{workspace_id}", response_model=WorkspaceRead, summary="Chi tiết workspace")
+@router.get(
+    "/{workspace_id}",
+    response_model=WorkspaceRead,
+    summary="Chi tiết workspace",
+    responses=error_responses(404),
+)
 async def get_workspace(workspace_id: IdPath, user: CurrentUser, service: WorkspaceServiceDep):
     return await service.get(user, workspace_id)
 
 
-@router.patch("/{workspace_id}", response_model=WorkspaceRead, summary="Sửa workspace (OWNER)")
+@router.patch(
+    "/{workspace_id}",
+    response_model=WorkspaceRead,
+    summary="Sửa workspace (OWNER)",
+    responses=error_responses(403, 404),
+)
 async def update_workspace(
     workspace_id: IdPath, payload: WorkspaceUpdate, user: CurrentUser, service: WorkspaceServiceDep
 ):
@@ -47,7 +58,10 @@ async def update_workspace(
 
 
 @router.delete(
-    "/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Xoá workspace (OWNER)"
+    "/{workspace_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Xoá workspace (OWNER)",
+    responses=error_responses(403, 404),
 )
 async def delete_workspace(workspace_id: IdPath, user: CurrentUser, service: WorkspaceServiceDep):
     await service.delete(user, workspace_id)
@@ -58,6 +72,7 @@ async def delete_workspace(workspace_id: IdPath, user: CurrentUser, service: Wor
     response_model=MemberRead,
     status_code=status.HTTP_201_CREATED,
     summary="Mời thành viên (OWNER)",
+    responses=error_responses(403, 404, 409),
 )
 async def invite_member(
     workspace_id: IdPath, payload: MemberInvite, user: CurrentUser, service: WorkspaceServiceDep
@@ -66,7 +81,10 @@ async def invite_member(
 
 
 @router.get(
-    "/{workspace_id}/members", response_model=list[MemberRead], summary="Danh sách thành viên"
+    "/{workspace_id}/members",
+    response_model=list[MemberRead],
+    summary="Danh sách thành viên",
+    responses=error_responses(404),
 )
 async def list_members(workspace_id: IdPath, user: CurrentUser, service: WorkspaceServiceDep):
     return await service.list_members(user, workspace_id)
@@ -76,6 +94,7 @@ async def list_members(workspace_id: IdPath, user: CurrentUser, service: Workspa
     "/{workspace_id}/members/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Xoá thành viên (OWNER)",
+    responses=error_responses(400, 403, 404),
 )
 async def remove_member(
     workspace_id: IdPath, user_id: IdPath, user: CurrentUser, service: WorkspaceServiceDep
