@@ -1,6 +1,7 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, UserServiceDep
+from app.api.responses import error_responses
 from app.schemas.user import PasswordChange, UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -20,6 +21,7 @@ async def update_me(payload: UserUpdate, user: CurrentUser, service: UserService
     "/me/password",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Đổi mật khẩu (đăng xuất mọi thiết bị)",
+    responses=error_responses(400),
 )
 async def change_password(payload: PasswordChange, user: CurrentUser, service: UserServiceDep):
     await service.change_password(user, payload)

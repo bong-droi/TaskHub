@@ -11,6 +11,6 @@ pyjwt>=2.8               # JWT
 python-multipart>=0.0.9  # OAuth2PasswordRequestForm login form
 # Cache and email (Day 6)
 redis>=5.0               # async Redis client
-# Production: uncomment one of the two lines below
-# asyncpg>=0.29          # PostgreSQL 16
+# Production database drivers (Day 7 Docker Compose PostgreSQL 16)
+asyncpg>=0.29            # PostgreSQL 16
 # aiomysql>=0.2          # MySQL 8

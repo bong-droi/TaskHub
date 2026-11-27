@@ -49,8 +49,11 @@ async def test_task_list_cache_roundtrip_and_invalidate(real_cache):
     params = TaskListParams(page=1, limit=20)
     page = Page[TaskRead](items=[], total=0, page=1, limit=20)
     version = await cache.version(1)
+    assert version is not None
     await cache.set(1, version, params, page)
     hit = await cache.get(1, version, params)
     assert hit is not None and hit.total == 0 and hit.pages == 0
     await cache.invalidate(1)
-    assert await cache.get(1, await cache.version(1), params) is None
+    new_version = await cache.version(1)
+    assert new_version is not None
+    assert await cache.get(1, new_version, params) is None

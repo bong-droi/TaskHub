@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.core.constants import (
+    CANNOT_ASSIGN_OWNER_ROLE,
     CANNOT_INVITE_OWNER_ROLE,
     NAME_MIN_LENGTH,
     WORKSPACE_NAME_MAX_LENGTH,
@@ -41,6 +42,17 @@ class MemberInvite(BaseSchema):
     def cannot_invite_as_owner(cls, v: WorkspaceRole) -> WorkspaceRole:
         if v == WorkspaceRole.OWNER:  # owner là duy nhất, gắn với workspace.owner_id
             raise ValueError(CANNOT_INVITE_OWNER_ROLE)
+        return v
+
+
+class MemberRoleUpdate(BaseSchema):
+    role: WorkspaceRole
+
+    @field_validator("role")
+    @classmethod
+    def cannot_assign_owner(cls, v: WorkspaceRole) -> WorkspaceRole:
+        if v == WorkspaceRole.OWNER:
+            raise ValueError(CANNOT_ASSIGN_OWNER_ROLE)
         return v
 
 

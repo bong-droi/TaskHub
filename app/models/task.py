@@ -1,4 +1,5 @@
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, Date, Enum, ForeignKey, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -6,6 +7,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.constants import TITLE_MAX_LENGTH
 from app.db.base import Base, CreatedAtMixin
 from app.models.enums import TaskPriority, TaskStatus
+
+if TYPE_CHECKING:
+    from app.models.comment import Comment
+    from app.models.label import Label
+    from app.models.project import Project
 
 # Bảng liên kết N-N thuần (không có thuộc tính thêm) -> dùng Table + `secondary`
 task_labels = Table(
@@ -37,11 +43,11 @@ class Task(CreatedAtMixin, Base):
     )
     due_date: Mapped[date | None] = mapped_column(Date)
 
-    project: Mapped["Project"] = relationship(back_populates="tasks")  # noqa: F821
-    # lazy="selectin": nạp labels cùng lúc với task (async không cho lazy-load ngầm)
-    labels: Mapped[list["Label"]] = relationship(  # noqa: F821
-        secondary=task_labels, back_populates="tasks", lazy="selectin"
+    project: Mapped["Project"] = relationship(back_populates="tasks")
+    # Chỉ nạp labels cho TaskRead; các bảng khác không dùng lazy="selectin" tràn lan
+    labels: Mapped[list["Label"]] = relationship(
+        secondary=task_labels, back_populates="tasks", lazy="selectin", passive_deletes=True
     )
-    comments: Mapped[list["Comment"]] = relationship(  # noqa: F821
-        back_populates="task", cascade="all, delete-orphan"
+    comments: Mapped[list["Comment"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan", passive_deletes=True
     )

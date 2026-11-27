@@ -1,8 +1,14 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.task import task_labels
+
+if TYPE_CHECKING:
+    from app.models.project import Project
+    from app.models.task import Task
 
 
 class Label(Base):
@@ -15,9 +21,9 @@ class Label(Base):
     name: Mapped[str] = mapped_column(String(50))
     color: Mapped[str] = mapped_column(String(7), default="#808080")
 
-    project: Mapped["Project"] = relationship(back_populates="labels")  # noqa: F821
-    tasks: Mapped[list["Task"]] = relationship(  # noqa: F821
-        secondary=task_labels, back_populates="labels"
+    project: Mapped["Project"] = relationship(back_populates="labels")
+    tasks: Mapped[list["Task"]] = relationship(
+        secondary=task_labels, back_populates="labels", passive_deletes=True
     )
 
 

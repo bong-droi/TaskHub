@@ -21,7 +21,7 @@ def clean_env(monkeypatch):
 
 def make(**overrides) -> Settings:
     overrides.setdefault("SECRET_KEY", GOOD_SECRET)
-    return Settings(_env_file=None, **overrides)  # không đọc .env thật
+    return Settings(_env_file=None, **overrides)  # type: ignore[call-arg]  # không đọc .env thật
 
 
 def test_defaults_are_valid_for_development():
@@ -33,7 +33,7 @@ def test_defaults_are_valid_for_development():
 
 def test_secret_key_is_required_even_in_development():
     with pytest.raises(ValidationError, match="SECRET_KEY"):
-        Settings(_env_file=None)
+        Settings(_env_file=None)  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------- production & APP_ENV
@@ -65,7 +65,7 @@ def test_app_env_in_dotenv_mismatching_os_env_is_rejected(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ValidationError, match="APP_ENV"):
-        Settings(_env_file=env_file)
+        Settings(_env_file=env_file)  # type: ignore[call-arg]
 
 
 def test_os_app_env_loads_matching_env_file_in_subprocess(tmp_path, monkeypatch):
@@ -193,7 +193,7 @@ def test_environment_variables_are_read_and_parsed(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://cache:6379/2")
     monkeypatch.setenv("CACHE_TTL_SECONDS", "30")
     monkeypatch.setenv("SMTP_STARTTLS", "false")
-    s = Settings(_env_file=None)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.REDIS_URL == "redis://cache:6379/2"
     assert s.CACHE_TTL_SECONDS == 30 and s.SMTP_STARTTLS is False
 
@@ -206,12 +206,12 @@ def test_env_files_layer_and_real_env_wins(tmp_path, monkeypatch):
         "CACHE_TTL_SECONDS=10\nLOG_LEVEL=DEBUG\n"
     )
     prod.write_text("CACHE_TTL_SECONDS=99\n", encoding="utf-8")
-    s = Settings(_env_file=(base, prod))
+    s = Settings(_env_file=(base, prod))  # type: ignore[call-arg]
     assert s.REDIS_URL == "redis://base:6379/0"  # chỉ có ở .env
     assert s.CACHE_TTL_SECONDS == 99  # .env.production (nạp sau) đè .env
     assert s.LOG_LEVEL == "DEBUG"
     monkeypatch.setenv("CACHE_TTL_SECONDS", "5")  # biến môi trường thật thắng cả hai file
-    assert Settings(_env_file=(base, prod)).CACHE_TTL_SECONDS == 5
+    assert Settings(_env_file=(base, prod)).CACHE_TTL_SECONDS == 5  # type: ignore[call-arg]
 
 
 def test_env_file_with_vietnamese_comments_is_readable(tmp_path):
@@ -220,7 +220,7 @@ def test_env_file_with_vietnamese_comments_is_readable(tmp_path):
         f"# Cấu hình thử: ký tự tiếng Việt\nSECRET_KEY={GOOD_SECRET}\nCACHE_TTL_SECONDS=12\n",
         encoding="utf-8",
     )
-    assert Settings(_env_file=env).CACHE_TTL_SECONDS == 12  # không lỗi cp1252 trên Windows
+    assert Settings(_env_file=env).CACHE_TTL_SECONDS == 12  # type: ignore[call-arg]
 
 
 def test_secrets_never_appear_in_repr():

@@ -1,5 +1,7 @@
 """Tầng business logic (async). Chỉ raise exception nghiệp vụ, không biết gì về HTTP."""
 
+from typing import Any
+
 from app.core.constants import (
     ASSIGNEE_NOT_FOUND,
     ASSIGNEE_NOT_IN_WORKSPACE,
@@ -12,7 +14,7 @@ from app.core.exceptions import (
     NotFoundException,
 )
 from app.core.permissions import READ_ROLES, WRITE_ROLES, can_delete_task
-from app.models import Task, User
+from app.models import Label, Task, User
 from app.models.enums import UserRole
 from app.repositories.task_repository import TaskRepository
 from app.repositories.user_repository import UserRepository
@@ -52,7 +54,7 @@ class TaskService:
         return (await self.resources.task(user, task_id, READ_ROLES)).task
 
     async def _query_page(self, project_id: int, params: TaskListParams) -> Page[TaskRead]:
-        filters = {
+        filters: dict[str, Any] = {
             "status": params.status,
             "priority": params.priority,
             "assignee_id": params.assignee_id,
@@ -60,7 +62,7 @@ class TaskService:
         }
         items = await self.tasks.list_by_project(project_id, params.skip, params.limit, **filters)
         total = await self.tasks.count_by_project(project_id, **filters)
-        return Page[TaskRead](
+        return Page[TaskRead].create(
             items=[TaskRead.model_validate(t) for t in items],
             total=total,
             page=params.page,
@@ -130,7 +132,7 @@ class TaskService:
         await self.cache.invalidate(ctx.project.id)
 
     # ------------------------------------------------------------------ gắn / gỡ label
-    async def _task_and_label(self, user: User, task_id: int, label_id: int):
+    async def _task_and_label(self, user: User, task_id: int, label_id: int) -> tuple[Task, Label]:
         ctx = await self.resources.task(user, task_id, WRITE_ROLES)
         self.resources.ensure_active(ctx.project)
         # Phải có quyền xem label: label của workspace khác thì như không tồn tại (404)

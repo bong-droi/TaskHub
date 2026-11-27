@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import CurrentUser, PaginationDep, TaskServiceDep
 from app.api.params import IdPath
+from app.api.responses import error_responses
 from app.core.constants import MAX_DB_ID
 from app.models.enums import TaskPriority, TaskStatus
 from app.schemas.common import Page
@@ -37,6 +38,7 @@ class TaskFilters:
     "",
     response_model=Page[TaskRead],
     summary="Task trong project (lọc status/priority/assignee/label + phân trang)",
+    responses=error_responses(404),
 )
 async def list_project_tasks(
     project_id: IdPath,
@@ -64,6 +66,7 @@ async def list_project_tasks(
     response_model=TaskRead,
     status_code=status.HTTP_201_CREATED,
     summary="Tạo task trong project (OWNER/EDITOR)",
+    responses=error_responses(400, 403, 404, 409),
 )
 async def create_project_task(
     project_id: IdPath, payload: TaskCreateInProject, user: CurrentUser, service: TaskServiceDep

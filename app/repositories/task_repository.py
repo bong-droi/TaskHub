@@ -1,4 +1,6 @@
-from sqlalchemy import func, select
+from typing import Any
+
+from sqlalchemy import Select, func, select
 
 from app.models import Label, Project, Task, WorkspaceMember, task_labels
 from app.models.enums import TaskPriority, TaskStatus
@@ -8,7 +10,7 @@ from app.repositories.base import BaseRepository
 class TaskRepository(BaseRepository[Task]):
     model = Task
 
-    def _visible_to(self, user_id: int):
+    def _visible_to(self, user_id: int) -> Select[Any]:
         """Task thuộc project của các workspace mà user là thành viên."""
         return (
             select(Task)
@@ -33,8 +35,8 @@ class TaskRepository(BaseRepository[Task]):
         priority: TaskPriority | None,
         assignee_id: int | None,
         label_id: int | None,
-    ) -> list:
-        conds = [Task.project_id == project_id]
+    ) -> list[Any]:
+        conds: list[Any] = [Task.project_id == project_id]
         if status is not None:
             conds.append(Task.status == status)
         if priority is not None:

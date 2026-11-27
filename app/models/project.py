@@ -1,8 +1,15 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedAtMixin
 from app.models.enums import ProjectStatus
+
+if TYPE_CHECKING:
+    from app.models.label import Label
+    from app.models.task import Task
+    from app.models.workspace import Workspace
 
 
 class Project(CreatedAtMixin, Base):
@@ -18,10 +25,10 @@ class Project(CreatedAtMixin, Base):
         Enum(ProjectStatus, native_enum=False, length=20), default=ProjectStatus.ACTIVE
     )
 
-    workspace: Mapped["Workspace"] = relationship(back_populates="projects")  # noqa: F821
-    tasks: Mapped[list["Task"]] = relationship(  # noqa: F821
-        back_populates="project", cascade="all, delete-orphan"
+    workspace: Mapped["Workspace"] = relationship(back_populates="projects")
+    tasks: Mapped[list["Task"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
     )
-    labels: Mapped[list["Label"]] = relationship(  # noqa: F821
-        back_populates="project", cascade="all, delete-orphan"
+    labels: Mapped[list["Label"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
     )

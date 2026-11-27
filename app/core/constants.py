@@ -39,6 +39,8 @@ MEMBER_NOT_FOUND = "Thành viên không tồn tại trong workspace"
 ALREADY_MEMBER = "Người dùng đã là thành viên của workspace"
 CANNOT_REMOVE_OWNER = "Không thể xoá owner khỏi workspace"
 CANNOT_INVITE_OWNER_ROLE = "Không thể mời thành viên với role OWNER"
+CANNOT_CHANGE_OWNER_ROLE = "Không thể thay đổi role của owner"
+CANNOT_ASSIGN_OWNER_ROLE = "Chỉ được đổi role thành viên sang EDITOR hoặc VIEWER"
 ASSIGNEE_NOT_IN_WORKSPACE = "Assignee không phải thành viên của workspace"
 
 # Phân quyền
